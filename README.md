@@ -9,7 +9,7 @@ You need to pass 2 different environment variables to the container to get it to
 You also need to mount the docker sock as a volume to the container to be able to control containers.
 - --> /var/run/docker.sock:/var/run/docker.sock
 
-You can find an example in docker-compose-example.yml
+You can find an example in [docker-compose-example.yml](https://github.com/thisismygithubok/DiscContainerController/blob/main/docker-compose-example.yml)
 
 ### Setting Up a Discord Bot ###
 1. Navigate to the [Discord Developer Portal](https://discord.com/developers/applications)
