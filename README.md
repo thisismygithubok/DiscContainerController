@@ -3,9 +3,9 @@ A docker-based discord bot to control other docker containers on the host. Built
 
 ## Config ##
 You need to pass 2 different environment variables to the container to get it to function.
+- DISCORD_GUILD_ID = ${DISCORD_GUILD_ID}
 - DISCORD_BOT_TOKEN = ${DISCORD_BOT_TOKEN}
     - If you need information on how to create a discord bot, please see the section below on [setting up a discord bot](#setting-up-a-discord-bot)
-- DISCORD_GUILD_ID = ${DISCORD_GUILD_ID}
 
 You also need to mount the docker sock as a volume to the container to be able to control containers.
 - /var/run/docker.sock:/var/run/docker.sock
