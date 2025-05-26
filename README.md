@@ -1,7 +1,7 @@
 # DiscContainerController
 A docker-based discord bot to control other docker containers on the host. Built with [DiscordPy](https://discordpy.readthedocs.io/en/stable/interactions/api.html).
 
-## Config ##
+## Environment Variables ##
 You need to pass 2 different environment variables to the container to get it to function.
 - DISCORD_GUILD_ID
     - This is your discord server ID
@@ -9,10 +9,9 @@ You need to pass 2 different environment variables to the container to get it to
     - This is your discord bot token
     - If you need information on how to create a discord bot, please see the section below on [setting up a discord bot](#setting-up-a-discord-bot)
 
+## Volumes ##
 You also need to mount the docker sock as a volume to the container to be able to control containers.
 - /var/run/docker.sock:/var/run/docker.sock
-
-You can find an example in [docker-compose-example.yml](https://github.com/thisismygithubok/DiscContainerController/blob/main/docker-compose-example.yml)
 
 ## Slash Commands ##
 This bot has several slash commands to use:
@@ -22,6 +21,9 @@ This bot has several slash commands to use:
     - First: You choose a container
     - Second: You choose an action of start, stop, or restart
     - Third: The bot will reply to you with a mention message once the action has been completed.
+
+## Docker Compose ##
+You can find an example in [docker-compose-example.yml](https://github.com/thisismygithubok/DiscContainerController/blob/main/docker-compose-example.yml)
 
 ## Setting Up a Discord Bot ##
 1. Navigate to the [Discord Developer Portal](https://discord.com/developers/applications)
