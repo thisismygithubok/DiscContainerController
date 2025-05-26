@@ -1,5 +1,5 @@
 # DiscContainerController
-A docker-based discord bot to control other docker containers on the host. Built with DiscordPy.
+A docker-based discord bot to control other docker containers on the host. Built with [DiscordPy(https://discordpy.readthedocs.io/en/stable/interactions/api.html)].
 
 ## Config ##
 You need to pass 2 different environment variables to the container to get it to function.
