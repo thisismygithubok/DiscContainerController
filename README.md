@@ -3,11 +3,11 @@ A docker-based discord bot to control other docker containers on the host. Built
 
 ## Config ##
 You need to pass 2 different environment variables to the container to get it to function.
---> DISCORD_BOT_TOKEN = <Your discord bot token>
---> DISCORD_GUILD_ID = <Your discord guild (server) ID>
+- --> DISCORD_BOT_TOKEN = <Your discord bot token>
+- --> DISCORD_GUILD_ID = <Your discord guild (server) ID>
 
 You also need to mount the docker sock as a volume to the container to be able to control containers.
---> /var/run/docker.sock:/var/run/docker.sock
+- --> /var/run/docker.sock:/var/run/docker.sock
 
 You can find an example in docker-compose-example.yml
 
