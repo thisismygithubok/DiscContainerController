@@ -20,6 +20,10 @@ if not DISCORD_BOT_TOKEN:
     logger.error("DISCORD_BOT_TOKEN is not set in the environment variables.")
     raise ValueError("DISCORD_BOT_TOKEN is required to run the bot.")
 
+if not DISCORD_GUILD_ID:
+    logger.error("DISCORD_GUILD_ID is not set in the environment variables.")
+    raise ValueError("DISCORD_GUILD_ID is required to run the bot.")
+
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
