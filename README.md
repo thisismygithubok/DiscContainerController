@@ -3,8 +3,10 @@ A docker-based discord bot to control other docker containers on the host. Built
 
 ## Config ##
 You need to pass 2 different environment variables to the container to get it to function.
-- DISCORD_GUILD_ID = ${DISCORD_GUILD_ID}
-- DISCORD_BOT_TOKEN = ${DISCORD_BOT_TOKEN}
+- DISCORD_GUILD_ID
+    - This is your discord server ID
+- DISCORD_BOT_TOKEN
+    - This is your discord bot token
     - If you need information on how to create a discord bot, please see the section below on [setting up a discord bot](#setting-up-a-discord-bot)
 
 You also need to mount the docker sock as a volume to the container to be able to control containers.
@@ -28,6 +30,7 @@ This bot has several slash commands to use:
 3. On the "General Information" page, give it a name and description.
 4. On the "Installation" page, change the install link to "None"
 5. On the "Bot" page, disable "Public Bot", and enable "Message Content Intent"  
+    - On this same page, make sure to copy your TOKEN as you'll need to pass this to the container
 6. On the "OAuth2" page, in the OAuth2 URL Generator section, choose "bot".
     - In the "Bot Permissions" section below this, in text permissions, choose "Send Messages" and "Manage Messages".
     - Copy the generated URL at the bottom and paste it into your browser. This will open the add bot to discord screen IN DISCORD. Select the server you want to add the bot to, and viola!
