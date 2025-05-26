@@ -12,7 +12,7 @@ You also need to mount the docker sock as a volume to the container to be able t
 You can find an example in docker-compose-example.yml
 
 ### Setting Up a Discord Bot ###
-1. Navigate to https://discord.com/developers/applications
+1. Navigate to the [Discord Developer Portal](https://discord.com/developers/applications)
 2. Create a new application
     a. Name it whatever you'd like the app to be named, in this case I've used "DiscContainerController"
 3. On the "General Information" page, give it a name and description.
