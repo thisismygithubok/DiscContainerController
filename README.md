@@ -12,6 +12,15 @@ You also need to mount the docker sock as a volume to the container to be able t
 
 You can find an example in [docker-compose-example.yml](https://github.com/thisismygithubok/DiscContainerController/blob/main/docker-compose-example.yml)
 
+## Slash Commands ##
+This bot has several slash commands to use:
+- /ping - does a simple check to see if the bot is online and responding
+- /list-containers - lists the containers on the host system
+- /control-container - this is an interative command:
+    - First: You choose a container
+    - Second: You choose an action of start, stop, or restart
+    - Third: The bot will reply to you with a mention message once the action has been completed.
+
 ## Setting Up a Discord Bot ##
 1. Navigate to the [Discord Developer Portal](https://discord.com/developers/applications)
 2. Create a new application
