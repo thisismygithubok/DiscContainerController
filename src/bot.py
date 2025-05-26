@@ -1,0 +1,57 @@
+import os
+import asyncio
+import discord
+import logging
+from discord import app_commands
+from discord.ext import commands
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+DISCORD_BOT_TOKEN = os.environ.get('DISCORD_BOT_TOKEN')
+DISCORD_GUILD_ID = os.environ.get('DISCORD_GUILD_ID')
+
+if not DISCORD_BOT_TOKEN:
+    logger.error("DISCORD_BOT_TOKEN is not set in the environment variables.")
+    raise ValueError("DISCORD_BOT_TOKEN is required to run the bot.")
+
+intents = discord.Intents.default()
+intents.message_content = True
+intents.guilds = True
+
+bot = commands.Bot(command_prefix='$', intents=intents, command_tree_cls=app_commands.CommandTree)
+
+# loading all cogs
+async def load_cogs():
+    for filename in os.listdir('./cogs'):
+        if filename.endswith('.py'):
+            await bot.load_extension(f'cogs.{filename[:-3]}')
+
+@bot.event
+async def on_ready():
+    logger.info(f'Bot is ready and logged in as {bot.user}')
+    try:
+        await load_cogs()
+        logger.info("Cogs loaded successfully.")
+
+        # Load other commands
+        guild = discord.Object(id=DISCORD_GUILD_ID) # type: ignore
+        bot.tree.copy_global_to(guild=guild)
+        synced_commands = await bot.tree.sync(guild=guild)
+        logger.info(f'Synced {len(synced_commands)} commands')
+    except Exception as e:
+        logger.error(f'Error syncing commands: {e}')
+        
+@bot.tree.command(name='ping', description='Ping the bot to check if it is online', guilds=[discord.Object(id=DISCORD_GUILD_ID)]) # type: ignore
+async def ping(interaction: discord.Interaction):
+    await interaction.response.send_message(f'{interaction.user.mention} Pong!', ephemeral=True)
+    await asyncio.sleep(10)
+    await interaction.delete_original_response()
+
+logger.info("Starting Discord bot...")
+bot.run(f'{DISCORD_BOT_TOKEN}')
