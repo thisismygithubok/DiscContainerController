@@ -33,20 +33,35 @@ class selectAction(discord.ui.Select):
         super().__init__(placeholder="Select an option",max_values=1,min_values=1,options=options)
     
     async def callback(self, interaction: discord.Interaction):
-        logger.info('Reached callback in selectAction class')
+        logger.debug('Reached callback in selectAction class')
+        if not self.view or not hasattr(self.view, 'selected_container'):
+            logger.error('No view or no container selected')
+            await interaction.response.send_message('Error: No container selected', ephemeral=True)
+            return
+        
+        container_name = self.view.selected_container
+        if not container_name:
+            logger.error('Container name is None or empty')
+            await interaction.response.send_message('Error: No container selected', ephemeral=True)
+            return
+        
         if self.values[0] == "Start":
             self.view.selected_action = "start"
+            logger.debug('Reached option "start" inside selectAction callback')
             await interaction.response.defer()
             subprocess.run(['docker', 'start', self.view.selected_container])
             await interaction.followup.send(f'{interaction.user.mention} {self.view.selected_container} has been started')
+
         elif self.values[0] == "Stop":
             self.view.selected_action = "stop"
+            logger.debug('Reached option "stop" inside selectAction callback')
             await interaction.response.defer()
             subprocess.run(['docker', 'stop', self.view.selected_container])
             await interaction.followup.send(f'{interaction.user.mention} {self.view.selected_container} has been stopped')
+
         elif self.values[0] == "Restart":
             self.view.selected_action = "restart"
-            logger.info('Reached restart inside callback')
+            logger.debug('Reached option "restart" inside selectAction callback')
             await interaction.response.defer()
             subprocess.run(['docker', 'restart', self.view.selected_container])
             await interaction.followup.send(f'{interaction.user.mention} {self.view.selected_container} has been restarted')
@@ -58,6 +73,7 @@ class selectContainerName(discord.ui.Select):
             result = subprocess.run(['docker', 'ps', '-a', '--format', '{{.Names}}'], capture_output=True, text=True, check=True)
             if result.returncode == 0:
                 containers = result.stdout.strip().splitlines()
+                containers.sort()
                 logger.debug(f'Found containers: {containers}')
             
         except subprocess.CalledProcessError as e:
@@ -77,9 +93,12 @@ class selectContainerName(discord.ui.Select):
         async def delete_after_delay():
             await asyncio.sleep(30)
             try:
-                await action_message.delete()
+                if action_message is not None:
+                    await action_message.delete()
             except discord.NotFound:
                 pass
+            except Exception as e:
+                logger.error(f'Error deleting message: {e}')
         asyncio.create_task(delete_after_delay())
 
 class controlContainers(commands.Cog):

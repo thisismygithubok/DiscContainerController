@@ -35,9 +35,10 @@ class ListContainers(commands.Cog):
                 if container:
                     status = subprocess.run(['docker', 'inspect', '--format', '{{.State.Status}}', container], capture_output=True, text=True, check=True)
                     container_status.append(f'{container}')
-                    container_status.append(f'{status.stdout.strip().upper()}')
+                    container_status.append(f'{status.stdout.strip().capitalize()}')
 
             formatted_list = split_containers(container_status)
+            formatted_list.sort()
             logger.debug(f'{formatted_list}')
             logger.debug(f'Container status: {container_status}')
 
