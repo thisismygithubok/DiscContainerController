@@ -3,4 +3,5 @@
 .venv*
 .env
 *.sh
+*.bat
 docker-compose.yml
