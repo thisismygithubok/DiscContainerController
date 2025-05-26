@@ -1,0 +1,9 @@
+services:
+  DiscContainerController:
+    image: thisismynameok/disccontainercontroller:latest
+    container_name: DiscContainerController
+    environment:
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
