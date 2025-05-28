@@ -2,7 +2,7 @@
 
 .venv*
 .env
-*.sh
+sync*.sh
 *.bat
 docker-compose.yml
 /config*

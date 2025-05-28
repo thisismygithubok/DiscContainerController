@@ -1,5 +1,4 @@
 import os
-import asyncio
 import discord
 import logging
 from discord import app_commands
@@ -17,9 +16,7 @@ class Ping(commands.Cog):
     @app_commands.command(name='ping', description='Ping the bot to check if it is online')
 
     async def ping(self, interaction: discord.Interaction):
-        await interaction.response.send_message(f'{interaction.user.mention} Pong!', ephemeral=True)
-        await asyncio.sleep(10)
-        await interaction.delete_original_response()
+        await interaction.response.send_message(f'{interaction.user.mention} Pong!', ephemeral=True, delete_after=30)
 
 async def setup(bot):
   await bot.add_cog(Ping(bot))

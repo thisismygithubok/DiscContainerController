@@ -1,5 +1,4 @@
 import os
-import asyncio
 import discord
 import logging
 import subprocess
@@ -21,7 +20,7 @@ class ListContainers(commands.Cog):
         try:
             result = subprocess.run(['docker', 'ps', '-a', '--format', '{{.Names}}'], capture_output=True, text=True, check=True)
             if result.returncode != 0:
-                await interaction.response.send_message(f'Error encountered during docker ps -a command - see service logs.', ephemeral=True)
+                await interaction.response.send_message(f'Error encountered during docker ps -a command - see service logs.', ephemeral=True, delete_after=30)
                 return
 
             containers = result.stdout.strip().splitlines()
@@ -43,7 +42,7 @@ class ListContainers(commands.Cog):
             logger.debug(f'Container status: {container_status}')
 
             if not container_status:
-                await interaction.response.send_message('No containers found.', ephemeral=True)
+                await interaction.response.send_message('No containers found.', ephemeral=True, delete_after=30)
             else:
                 table = PrettyTable()
                 table.field_names = ['Container Name', 'Status']
@@ -54,9 +53,7 @@ class ListContainers(commands.Cog):
                 await interaction.response.send_message(embed=embed)
         except subprocess.CalledProcessError as e:
             logger.error(f'Error executing docker command: {e}')
-            await interaction.response.send_message(f'Error encountered in dockerlist - see service logs.', ephemeral=True)
-            await asyncio.sleep(30)
-            await interaction.delete_original_response()
+            await interaction.response.send_message(f'Error encountered in dockerlist - see service logs.', ephemeral=True, delete_after=30)
 
 async def setup(bot):
   await bot.add_cog(ListContainers(bot))
