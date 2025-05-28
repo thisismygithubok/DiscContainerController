@@ -5,3 +5,4 @@
 *.sh
 *.bat
 docker-compose.yml
+/config*
