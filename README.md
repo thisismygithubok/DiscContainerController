@@ -40,3 +40,5 @@ You can find an example in [docker-compose-example.yml](https://github.com/thisi
     - In the "Bot Permissions" section below this, in text permissions, choose "Send Messages" and "Manage Messages".
     - Copy the generated URL at the bottom and paste it into your browser. This will open the add bot to discord screen IN DISCORD. Select the server you want to add the bot to, and viola!
 7. You should now have the bot available, and you can change the permissions to narrow it to a specific text channel of your liking.
+
+test
