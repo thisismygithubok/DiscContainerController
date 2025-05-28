@@ -8,6 +8,9 @@ You need to pass 2 different environment variables to the container to get it to
 - DISCORD_BOT_TOKEN
     - This is your discord bot token
     - If you need information on how to create a discord bot, please see the section below on [setting up a discord bot](#setting-up-a-discord-bot)
+- TZ
+    - This is optional, but you can specify this for the container/logging output timezone
+    - Must use IANA standard timezones
 
 ## Volumes ##
 You also need to mount the docker sock as a volume to the container to be able to control containers.
