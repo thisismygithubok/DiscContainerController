@@ -1,6 +1,11 @@
 # DiscContainerController
 A docker-based discord bot to control other docker containers on the host. Built with [DiscordPy](https://discordpy.readthedocs.io/en/stable/).
 
+<a href="https://hub.docker.com/r/thisismynameok/disc-container-controller"><img alt="Docker Image Size (tag)" src="https://img.shields.io/docker/image-size/thisismynameok/disc-container-controller/latest?style=for-the-badge">
+<img alt="Docker Pulls" src="https://img.shields.io/docker/pulls/thisismynameok/disc-container-controller?style=for-the-badge"></a>
+<img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/thisismygithubok/DiscContainerController?color=brightgreen&style=for-the-badge">
+<img alt="GitHub" src="https://img.shields.io/github/license/thisismygithubok/DiscContainerController?style=for-the-badge"></p>
+
 ## Environment Variables ##
 - REQUIRED
     - DISCORD_GUILD_ID
