@@ -7,7 +7,9 @@ COPY src/ .
 COPY src/entrypoint.sh /entrypoint.sh
 
 RUN apk update && apk upgrade
-RUN apk add docker-cli python3 py3-pip tzdata
+RUN apk add docker-cli python3 py3-pip tzdata nodejs npm
+
+RUN npm install puppeteer
 
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"

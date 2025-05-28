@@ -53,6 +53,12 @@ async def on_ready():
         await load_cogs()
         logger.info("Cogs loaded successfully")
 
+        # Add command syncing
+        guild = discord.Object(id=DISCORD_GUILD_ID) # type: ignore
+        bot.tree.copy_global_to(guild=guild)
+        synced_commands = await bot.tree.sync(guild=guild)
+        logger.info(f'Synced {len(synced_commands)} commands')
+
     except Exception as e:
         logger.error(f'Error syncing commands: {e}')
 
