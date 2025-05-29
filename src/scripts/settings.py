@@ -14,7 +14,7 @@ DEFAULT_SETTINGS = {
     "AdminIDs": [],
     "AllowedRoles": [],
     "AllowedContainers": [],
-    "Sections": []
+    "Groups": []
 }
 
 def check_settings_file():
