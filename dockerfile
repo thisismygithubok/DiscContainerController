@@ -1,4 +1,4 @@
-FROM alpine:3.21
+FROM alpine:3
 
 WORKDIR /src
 RUN mkdir /config
@@ -12,7 +12,16 @@ RUN apk add docker-cli python3 py3-pip tzdata
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-RUN pip3 install discord.py && pip3 install prettytable
+RUN pip3 install discord.py && pip3 install prettytable setuptools>=78.1.1
+
+# Non-Root Docker
+RUN addgroup -S -g 1000 docker && \
+    adduser -S -D -H -h /src -s /sbin/nologin -G docker -u 1000 nonroot && \
+    adduser nonroot docker && \
+    chown -R nonroot:docker /src /config /entrypoint.sh && \
+    chmod -R 755 /src /config /entrypoint.sh
+
+USER nonroot
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python3", "bot.py"]
