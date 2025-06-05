@@ -23,6 +23,45 @@ class chooseContainerView(discord.ui.View):
         self.selected_container = None
         self.add_item(selectContainerName())
 
+class ContainerPaginationView(discord.ui.View):
+    def __init__(self, containers, timeout=30):
+        super().__init__(timeout=timeout)
+        self.containers = containers
+        self.current_page = 0
+        self.items_per_page = 24  # Due to 25 list item limit
+        self.total_pages = (len(containers) - 1) // self.items_per_page + 1
+        self.update_select_menu()
+
+    def update_select_menu(self):
+        for item in self.children[:]:
+            if isinstance(item, discord.ui.Select):
+                self.remove_item(item)
+        start = self.current_page * self.items_per_page
+        end = start + self.items_per_page
+        current_containers = self.containers[start:end]
+        select_menu = selectContainerName(current_containers)
+        self.add_item(select_menu)
+
+    @discord.ui.button(label="Previous", style=discord.ButtonStyle.gray, disabled=True)
+    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page = max(0, self.current_page - 1)
+        self.update_select_menu()
+        button.disabled = self.current_page == 0
+        next_button = [x for x in self.children if isinstance(x, discord.ui.Button) and x.label == "Next"][0]
+        next_button.disabled = self.current_page >= self.total_pages - 1
+        
+        await interaction.response.edit_message(view=self)
+
+    @discord.ui.button(label="Next", style=discord.ButtonStyle.gray)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page = min(self.total_pages - 1, self.current_page + 1)
+        self.update_select_menu()
+        button.disabled = self.current_page >= self.total_pages - 1
+        prev_button = [x for x in self.children if isinstance(x, discord.ui.Button) and x.label == "Previous"][0]
+        prev_button.disabled = self.current_page == 0
+        
+        await interaction.response.edit_message(view=self)
+
 class selectAction(discord.ui.Select):
     def __init__(self):
         options=[
@@ -67,7 +106,13 @@ class selectAction(discord.ui.Select):
             await interaction.followup.send(f'{interaction.user.mention} {self.view.selected_container} has been restarted')
 
 class selectContainerName(discord.ui.Select):
-    def __init__(self):
+    def __init__(self, containers):
+        options = [
+            discord.SelectOption(label=container)
+            for container in containers
+        ]
+        super().__init__(placeholder="Select a container", max_values=1, min_values=1, options=options)
+
         containers = []
         try:
             result = subprocess.run(['docker', 'ps', '-a', '--format', '{{.Names}}'], capture_output=True, text=True, check=True)
@@ -78,12 +123,6 @@ class selectContainerName(discord.ui.Select):
             
         except subprocess.CalledProcessError as e:
             logger.error(f'Error executing docker command: {e}')
-    
-        options=[
-            discord.SelectOption(label=container)
-            for container in containers
-        ]
-        super().__init__(placeholder="Select a container",max_values=1,min_values=1,options=options)
 
     async def callback(self, interaction: discord.Interaction):
         selected_container = self.values[0]
@@ -107,11 +146,27 @@ class controlContainers(commands.Cog):
     
     @app_commands.command(name='control-container', description='Start, Stop, or Restart the selected Docker container.')
     @app_commands.guilds(discord.Object(id=DISCORD_GUILD_ID)) # type: ignore
-    
+
     async def controlContainer(self, interaction: discord.Interaction):
-        await interaction.response.send_message(view=chooseContainerView(), ephemeral=True)
-        await asyncio.sleep(30)
-        await interaction.delete_original_response()
+        try:
+            result = subprocess.run(['docker', 'ps', '-a', '--format', '{{.Names}}'], 
+                                 capture_output=True, text=True, check=True)
+            if result.returncode == 0:
+                containers = result.stdout.strip().splitlines()
+                containers.sort()
+                logger.debug(f'Found containers: {containers}')
+                
+                view = ContainerPaginationView(containers)
+                await interaction.response.send_message(view=view, ephemeral=True)
+                await asyncio.sleep(30)
+                await interaction.delete_original_response()
+                
+        except subprocess.CalledProcessError as e:
+            logger.error(f'Error executing docker command: {e}')
+            await interaction.response.send_message(
+                'Error retrieving container list - see service logs.',
+                ephemeral=True
+            )
 
 async def setup(bot):
   await bot.add_cog(controlContainers(bot))

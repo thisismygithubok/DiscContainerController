@@ -15,7 +15,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 RUN pip3 install discord.py && pip3 install prettytable setuptools>=78.1.1
 
 # Non-Root Docker
-RUN addgroup -S -g 1000 docker && \
+RUN addgroup -S -g 988 docker && \
     adduser -S -D -H -h /src -s /sbin/nologin -G docker -u 1000 nonroot && \
     adduser nonroot docker && \
     chown -R nonroot:docker /src /config /entrypoint.sh && \
