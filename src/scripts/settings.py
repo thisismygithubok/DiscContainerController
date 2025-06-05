@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_SETTINGS = {
     "AdminIDs": [],
     "AllowedRoles": [],
-    "AllowedContainers": []
+    "AllowedContainers": [],
+    "Groups": []
 }
 
 def check_settings_file():
