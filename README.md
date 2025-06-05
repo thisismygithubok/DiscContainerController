@@ -23,6 +23,12 @@ A docker-based discord bot to control other docker containers on the host. Built
 You also need to mount the docker sock as a volume to the container to be able to control containers.
 - /var/run/docker.sock:/var/run/docker.sock
 
+## Labels ##
+You can optionally add container labels called 'section' to categorize and list your containers in a more friendly manner.
+- Example
+    - labels: 
+        - section: "Game Servers"
+
 ## Slash Commands ##
 This bot has several slash commands to use:
 - /ping - does a simple check to see if the bot is online and responding
