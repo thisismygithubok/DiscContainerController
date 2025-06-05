@@ -26,15 +26,23 @@ class ListContainers(commands.Cog):
             containers = result.stdout.strip().splitlines()
             logger.debug(f'Found containers: {containers}')
             container_status = []
+            sections = []
 
             def split_containers(input_list):
                 return [input_list[i:i + 2] for i in range(0, len(input_list), 2)]
 
             for container in containers:
                 if container:
-                    status = subprocess.run(['docker', 'inspect', '--format', '{{.State.Status}}', container], capture_output=True, text=True, check=True)
+                    inspect = subprocess.run(['docker', 'inspect', '--format', '{{.State.Status}},{{.Config.Labels.section}}', container], capture_output=True, text=True, check=True)
+                    status, section = inspect.stdout.strip().split(',')
+                    section = section if section else "Uncategorized"
                     container_status.append(f'{container}')
                     container_status.append(f'{status.stdout.strip().capitalize()}')
+
+                    if section not in sections:
+                        sections[section] = []
+                    sections[section].append([container, status.capitalize()])
+
 
             formatted_list = split_containers(container_status)
             formatted_list.sort()
@@ -44,13 +52,34 @@ class ListContainers(commands.Cog):
             if not container_status:
                 await interaction.response.send_message('No containers found.', ephemeral=True, delete_after=30)
             else:
-                table = PrettyTable()
-                table.field_names = ['Container Name', 'Status']
-                table.add_rows(formatted_list)
-                embed = discord.Embed(
-                    description=f'```\n{table}```'
-                )
-                await interaction.response.send_message(embed=embed)
+                embeds = []
+                for section, containers in sorted(sections.items()):
+                    table = PrettyTable()
+                    table.field_names = ['Container Name', 'Status']
+                    table.add_rows(sorted(containers))  # Sort containers within each section
+                    
+                    embed = discord.Embed(
+                        title=f"Section: {section}",
+                        description=f"```\n{table}```",
+                        color=discord.Color.blue()
+                    )
+                    embeds.append(embed)
+
+                # Discord allows max 10 embeds per message
+                for i in range(0, len(embeds), 10):
+                    chunk = embeds[i:i + 10]
+                    if i == 0:
+                        await interaction.response.send_message(embeds=chunk)
+                    else:
+                        await interaction.followup.send(embeds=chunk)
+                        
+                # table = PrettyTable()
+                # table.field_names = ['Container Name', 'Status']
+                # table.add_rows(formatted_list)
+                # embed = discord.Embed(
+                #     description=f'```\n{table}```'
+                # )
+                # await interaction.response.send_message(embed=embed)
         except subprocess.CalledProcessError as e:
             logger.error(f'Error executing docker command: {e}')
             await interaction.response.send_message(f'Error encountered in dockerlist - see service logs.', ephemeral=True, delete_after=30)
