@@ -52,7 +52,7 @@ volumes:
 ```
 
 ## Labels ##
-You can optionally add container labels called 'section' to categorize and list your containers in a more friendly manner.
+You need to add container labels called 'section' to categorize and list your containers in a more friendly manner.
 ```
 labels:
     section: "Game Servers"
