@@ -12,4 +12,3 @@ else
 fi
 
 exec "$@"
-EOF
