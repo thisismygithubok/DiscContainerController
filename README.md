@@ -6,6 +6,11 @@ A docker-based discord bot to control other docker containers on the host. Built
 <img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/thisismygithubok/DiscContainerController?color=brightgreen&style=for-the-badge">
 <img alt="GitHub" src="https://img.shields.io/github/license/thisismygithubok/DiscContainerController?style=for-the-badge"></p>
 
+## Docker Run ##
+```
+docker run -e DISCORD_GUILD_ID=<your_guild_id> -e DISCORD_BOT_TOKEN=<your_bot_token> -e TZ=<your_tz> -v /var/run/docker.sock:/var/run/docker.sock -l section=<section_name> thisismynameok/disc-container-controller:latest
+```
+
 ## Environment Variables ##
 - REQUIRED
     - DISCORD_GUILD_ID
