@@ -19,15 +19,26 @@ A docker-based discord bot to control other docker containers on the host. Built
         - This is optional, but you can specify this for the container/logging output timezone
         - Must use IANA standard timezones
 
+```
+environment:
+    DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+    DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
+    TZ: ${TZ}
+```
+
 ## Volumes ##
 You also need to mount the docker sock as a volume to the container to be able to control containers.
-- /var/run/docker.sock:/var/run/docker.sock
+```
+volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+```
 
 ## Labels ##
 You can optionally add container labels called 'section' to categorize and list your containers in a more friendly manner.
-- Example
-    - labels: 
-        - section: "Game Servers"
+```
+labels:
+    section: "Game Servers"
+```
 
 ## Slash Commands ##
 This bot has several slash commands to use:
