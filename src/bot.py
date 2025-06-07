@@ -5,6 +5,9 @@ import scripts.settings as settings
 from discord import app_commands
 from discord.ext import commands
 
+# Suppress the PyNaCl warning since voice functionality isn't needed.
+discord.VoiceClient.warn_nacl = False
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
