@@ -23,7 +23,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
 
-bot = commands.Bot(command_prefix=None, intents=intents, command_tree_cls=app_commands.CommandTree)
+bot = commands.Bot(command_prefix=lambda bot, message: [], intents=intents, command_tree_cls=app_commands.CommandTree)
 
 if not DISCORD_BOT_TOKEN:
     logger.error("DISCORD_BOT_TOKEN is not set in the environment variables")
