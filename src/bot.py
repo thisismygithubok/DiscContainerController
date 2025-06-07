@@ -44,7 +44,7 @@ async def load_cogs():
     for filename in os.listdir('./cogs'):
         if filename.endswith('.py'):
             await bot.load_extension(f'cogs.{filename[:-3]}')
-            logger.info(f'Loaded {filename} cog successfully')
+            logger.debug(f'Loaded {filename} cog successfully')
 
 @bot.event
 async def on_ready():
