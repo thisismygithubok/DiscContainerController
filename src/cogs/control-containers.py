@@ -32,7 +32,7 @@ class ContainerPaginationView(discord.ui.View):
         self.items_per_page = 24
         self.total_pages = (len(containers) - 1) // self.items_per_page + 1
         
-        logger.info(f"Creating pagination view with {len(containers)} containers")
+        logger.debug(f"Creating pagination view with {len(containers)} containers")
         
         # Initialize without buttons first
         self.prev_button = None
@@ -223,9 +223,9 @@ class controlContainers(commands.Cog):
                 return
 
             containers.sort()
-            logger.info(f'Creating view with {len(containers)} filtered containers')
+            logger.debug(f'Creating view with {len(containers)} filtered containers')
             view = ContainerPaginationView(containers)
-            logger.info(f'Filtered containers by permission: {containers}')
+            logger.debug(f'Filtered containers by permission: {containers}')
 
             await interaction.response.send_message(view=view, ephemeral=True)
             await asyncio.sleep(30)
