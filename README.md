@@ -6,6 +6,23 @@ A docker-based discord bot to control other docker containers on the host. Built
 <img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/thisismygithubok/DiscContainerController?color=brightgreen&style=for-the-badge">
 <img alt="GitHub" src="https://img.shields.io/github/license/thisismygithubok/DiscContainerController?style=for-the-badge"></p>
 
+## Slash Commands ##
+This bot has several slash commands to use:
+- /ping - does a simple check to see if the bot is online and responding
+- /list-containers - lists the containers on the host system
+- /control-container - this is an interative command:
+    - First: You choose a container
+    - Second: You choose an action of start, stop, or restart
+    - Third: The bot will reply to you with a mention message once the action has been completed.
+
+## Docker Run ##
+```
+docker run -e DISCORD_GUILD_ID=<your_guild_id> -e DISCORD_BOT_TOKEN=<your_bot_token> -e TZ=<your_tz> -v /var/run/docker.sock:/var/run/docker.sock -l section=<section_name> thisismynameok/disc-container-controller:latest
+```
+
+## Docker Compose ##
+You can find an example in [docker-compose-example.yml](https://github.com/thisismygithubok/DiscContainerController/blob/main/docker-compose-example.yml)
+
 ## Environment Variables ##
 - REQUIRED
     - DISCORD_GUILD_ID
@@ -19,27 +36,51 @@ A docker-based discord bot to control other docker containers on the host. Built
         - This is optional, but you can specify this for the container/logging output timezone
         - Must use IANA standard timezones
 
+```
+environment:
+    DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+    DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
+    TZ: ${TZ}
+```
+
 ## Volumes ##
-You also need to mount the docker sock as a volume to the container to be able to control containers.
-- /var/run/docker.sock:/var/run/docker.sock
+You need to mount the docker sock as a volume to the container to be able to control containers. You also need to mount a config directory for the setting.json to be generated into
+```
+volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+    - ./config:config
+```
 
 ## Labels ##
-You can optionally add container labels called 'section' to categorize and list your containers in a more friendly manner.
-- Example
-    - labels: 
-        - section: "Game Servers"
+You need to add container labels called 'section' to categorize and list your containers in a more friendly manner.
+```
+labels:
+    section: "Game Servers"
+```
 
-## Slash Commands ##
-This bot has several slash commands to use:
-- /ping - does a simple check to see if the bot is online and responding
-- /list-containers - lists the containers on the host system
-- /control-container - this is an interative command:
-    - First: You choose a container
-    - Second: You choose an action of start, stop, or restart
-    - Third: The bot will reply to you with a mention message once the action has been completed.
-
-## Docker Compose ##
-You can find an example in [docker-compose-example.yml](https://github.com/thisismygithubok/DiscContainerController/blob/main/docker-compose-example.yml)
+## Settings ##
+A settings.json file will be generated in your mounted config folder.
+- AdminIDs - this is a discord user ID, and these IDs will have permissions to see/control all containers within all sections.
+- AllowedRoles - this is a dict of role IDs and the sections those roles are allowed to see/control
+- Sections - these are the sections you've defined via container labels. These are necessary to see/control containers.
+- Example:
+```
+{
+    "AdminIDs": [
+        "1234567890101010"
+    ],
+    "AllowedRoles": {
+        "0101010987654321": [
+            "Game Servers"
+        ]
+    },
+    "Sections": [
+        "Backend",
+        "Frontend",
+        "Game Servers"
+    ]
+}
+```
 
 ## Setting Up a Discord Bot ##
 1. Navigate to the [Discord Developer Portal](https://discord.com/developers/applications)

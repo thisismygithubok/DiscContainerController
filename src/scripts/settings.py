@@ -12,9 +12,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SETTINGS = {
     "AdminIDs": [],
-    "AllowedRoles": [],
-    "AllowedContainers": [],
-    "Groups": []
+    "AllowedRoles": {},
+    "Sections": []
 }
 
 def check_settings_file():
@@ -23,17 +22,17 @@ def check_settings_file():
     
     try:
         if not config_path.parent.exists():
-            logger.info("Creating config folder...")
+            logger.debug("Creating config folder...")
             config_path.parent.mkdir(parents=True, exist_ok=True)
             
         if not config_path.exists():
-            logger.info("Creating new settings.json with default values...")
+            logger.debug("Creating new settings.json with default values...")
             with open(config_path, 'w') as f:
                 json.dump(DEFAULT_SETTINGS, f, indent=4)
         else:
             with open(config_path, 'r') as f:
                 current_settings = json.load(f)
-                logger.info(f"Settings file already exists, loading...")
+                logger.debug(f"Settings file already exists, loading...")
             
             updated = False
             for key, value in DEFAULT_SETTINGS.items():
