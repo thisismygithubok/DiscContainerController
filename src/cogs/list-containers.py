@@ -1,4 +1,5 @@
 import os
+import asyncio
 import json
 import discord
 import logging
@@ -116,9 +117,19 @@ class ListContainers(commands.Cog):
                 for i in range(0, len(embeds), 10):
                     chunk = embeds[i:i + 10]
                     if i == 0:
-                        await interaction.response.send_message(embeds=chunk)
+                        await interaction.response.send_message(embeds=chunk, ephemeral=True, delete_after=30)
                     else:
-                        await interaction.followup.send(embeds=chunk)
+                        embed_list = await interaction.followup.send(embeds=chunk, ephemeral=True)
+                        async def delete_after_delay():
+                            await asyncio.sleep(30)
+                            try:
+                                if embed_list is not None:
+                                    await embed_list.delete()
+                            except discord.NotFound:
+                                pass
+                            except Exception as e:
+                                logger.error(f'Error deleting message: {e}')
+                        asyncio.create_task(delete_after_delay())
 
         except subprocess.CalledProcessError as e:
             logger.error(f'Error executing docker command: {e}')
