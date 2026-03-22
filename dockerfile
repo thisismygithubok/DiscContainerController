@@ -6,14 +6,12 @@ RUN mkdir /config
 COPY src/ .
 COPY src/entrypoint.sh /entrypoint.sh
 
-RUN apk update && apk upgrade
 RUN apk add docker-cli python3 py3-pip tzdata su-exec
-RUN apk update && apk upgrade
 
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-RUN pip3 install discord.py && pip3 install prettytable setuptools>=78.1.1
+RUN pip3 install discord.py prettytable setuptools>=78.1.1
 
 # Non-Root Docker
 RUN addgroup -S -g 988 docker && \
