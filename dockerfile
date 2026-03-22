@@ -1,4 +1,4 @@
-FROM alpine:3.21.6
+FROM alpine:3.23
 
 WORKDIR /src
 RUN mkdir /config
@@ -8,6 +8,7 @@ COPY src/entrypoint.sh /entrypoint.sh
 
 RUN apk update && apk upgrade
 RUN apk add docker-cli python3 py3-pip tzdata su-exec
+RUN apk update && apk upgrade
 
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
