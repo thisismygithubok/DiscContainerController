@@ -69,4 +69,4 @@ async def on_ready():
     logger.info(f'Bot is ready and logged in as {bot.user}')
 
 logger.info("Starting Discord bot...")
-bot.run(f'{DISCORD_BOT_TOKEN}')
+bot.run(f'{DISCORD_BOT_TOKEN}', log_handler=None)
