@@ -2,10 +2,10 @@ import os
 import asyncio
 import discord
 import logging
-import json
-import subprocess
 from discord import app_commands
 from discord.ext import commands
+from scripts.settings import load_settings, allowed_sections
+from scripts.containers import docker, list_containers, permitted
 
 logger = logging.getLogger(__name__)
 
@@ -14,15 +14,8 @@ DISCORD_GUILD_ID = os.environ.get('DISCORD_GUILD_ID')
 class chooseActionView(discord.ui.View):
     def __init__(self, selected_container: str, *, timeout=30):
         super().__init__(timeout=timeout)
-        self.selected_action = None
         self.selected_container = selected_container
         self.add_item(selectAction())
-
-class chooseContainerView(discord.ui.View):
-    def __init__(self, *, timeout=30):
-        super().__init__(timeout=timeout)
-        self.selected_container = None
-        self.add_item(selectContainerName())
 
 class ContainerPaginationView(discord.ui.View):
     def __init__(self, containers, timeout=30):
@@ -104,32 +97,36 @@ class selectAction(discord.ui.Select):
             await interaction.response.send_message('Error: No container selected', ephemeral=True)
             return
         
-        if self.values[0] == "Start":
-            self.view.selected_action = "start"
-            logger.debug('Reached option "start" inside selectAction callback')
-            await interaction.response.defer()
-            subprocess.run(['docker', 'start', self.view.selected_container])
-            await interaction.followup.send(f'{interaction.user.mention} {self.view.selected_container} has been started')
+        action = self.values[0].lower()
+        logger.debug(f'Reached option "{action}" inside selectAction callback')
+        await interaction.response.defer()
 
-        elif self.values[0] == "Stop":
-            self.view.selected_action = "stop"
-            logger.debug('Reached option "stop" inside selectAction callback')
-            await interaction.response.defer()
-            subprocess.run(['docker', 'stop', self.view.selected_container])
-            await interaction.followup.send(f'{interaction.user.mention} {self.view.selected_container} has been stopped')
+        # Re-check permission at action time: settings may have changed since the menu was shown.
+        try:
+            containers = await list_containers()
+        except RuntimeError as e:
+            logger.error(f'Error executing docker command: {e}')
+            await interaction.followup.send('Error retrieving container list - see service logs.', ephemeral=True)
+            return
+        settings = load_settings()
+        allowed = allowed_sections(settings, interaction.user) if settings else set()
+        if container_name not in [c[0] for c in permitted(containers, allowed)]:
+            await interaction.followup.send(f'You do not have permission to control {container_name}', ephemeral=True)
+            return
 
-        elif self.values[0] == "Restart":
-            self.view.selected_action = "restart"
-            logger.debug('Reached option "restart" inside selectAction callback')
-            await interaction.response.defer()
-            subprocess.run(['docker', 'restart', self.view.selected_container])
-            await interaction.followup.send(f'{interaction.user.mention} {self.view.selected_container} has been restarted')
+        code, _, err = await docker(action, container_name)
+        if code != 0:
+            logger.error(f'docker {action} {container_name} failed: {err.strip()}')
+            await interaction.followup.send(f'{interaction.user.mention} failed to {action} {container_name} - see service logs.')
+            return
+        past = {'start': 'started', 'stop': 'stopped', 'restart': 'restarted'}[action]
+        await interaction.followup.send(f'{interaction.user.mention} {container_name} has been {past}')
 
 class selectContainerName(discord.ui.Select):
     def __init__(self, containers):
         options = [
-            discord.SelectOption(label=container)
-            for container in containers
+            discord.SelectOption(label=name, description=state.capitalize(), emoji="🟢" if state == "running" else "🛑")
+            for name, state, _ in containers
         ]
         super().__init__(placeholder="Select a container", max_values=1, min_values=1, options=options)
 
@@ -152,71 +149,24 @@ class selectContainerName(discord.ui.Select):
 class controlContainers(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.settings = self.load_settings()
 
-    def load_settings(self):
-        try:
-            with open('/config/settings.json', 'r') as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f'Error loading settings: {e}')
-            return None
-        
-    def get_allowed_sections(self, user: discord.Member):
-        # Check if user is admin
-        if str(user.id) in self.settings.get('AdminIDs', []):
-            return self.settings.get('Sections', [])
-
-        # Get user's roles and their allowed sections
-        allowed_sections = set()
-        for role in user.roles:
-            role_sections = self.settings.get('AllowedRoles', {}).get(str(role.id), [])
-            allowed_sections.update(role_sections)
-
-        return list(allowed_sections)
-    
     @app_commands.command(name='control-container', description='Start, Stop, or Restart the selected Docker container.')
     @app_commands.guilds(discord.Object(id=DISCORD_GUILD_ID)) # type: ignore
 
     async def controlContainer(self, interaction: discord.Interaction):
         try:
-            if not self.settings:
+            settings = load_settings()
+            if not settings:
                 await interaction.response.send_message('Error: Settings not loaded', ephemeral=True)
                 return
 
-            # Get allowed sections for this user
-            allowed_sections = self.get_allowed_sections(interaction.user)
-            if not allowed_sections and str(interaction.user.id) not in self.settings.get('AdminIDs', []):
+            # Get allowed sections for this user (None = admin)
+            allowed = allowed_sections(settings, interaction.user)
+            if allowed is not None and not allowed:
                 await interaction.response.send_message('You do not have permission to control any sections', ephemeral=True)
                 return
 
-            # Get all containers and filter by section
-            result = subprocess.run(['docker', 'ps', '-a', '--format', '{{.Names}}'], 
-                                capture_output=True, text=True, check=True)
-            
-            if result.returncode != 0:
-                await interaction.response.send_message(
-                    'Error retrieving container list - see service logs.',
-                    ephemeral=True
-                )
-                return
-
-            containers = []
-            all_containers = result.stdout.strip().splitlines()
-            
-            # Filter containers by section permissions
-            for container in all_containers:
-                if container:
-                    inspect = subprocess.run(
-                        ['docker', 'inspect', '--format', '{{.Config.Labels.section}}', container],
-                        capture_output=True, text=True, check=True
-                    )
-                    section = inspect.stdout.strip()
-                    section = section if section else "Uncategorized"
-                    
-                    # Only add container if user has permission for this section or is admin
-                    if section in allowed_sections or str(interaction.user.id) in self.settings.get('AdminIDs', []):
-                        containers.append(container)
+            containers = permitted(await list_containers(), allowed)
 
             if not containers:
                 await interaction.response.send_message('No containers available to control.', ephemeral=True)
@@ -231,7 +181,7 @@ class controlContainers(commands.Cog):
             await asyncio.sleep(30)
             await interaction.delete_original_response()
 
-        except subprocess.CalledProcessError as e:
+        except RuntimeError as e:
             logger.error(f'Error executing docker command: {e}')
             await interaction.response.send_message(
                 'Error retrieving container list - see service logs.',

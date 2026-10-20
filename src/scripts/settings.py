@@ -2,12 +2,6 @@ import json
 import logging
 from pathlib import Path
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-
 logger = logging.getLogger(__name__)
 
 DEFAULT_SETTINGS = {
@@ -16,8 +10,28 @@ DEFAULT_SETTINGS = {
     "Sections": []
 }
 
+CONFIG_PATH = Path("/config/settings.json")
+
+def load_settings():
+    """Read settings.json fresh so edits apply without a restart. Returns None on error."""
+    try:
+        with open(CONFIG_PATH, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f'Error loading settings: {e}')
+        return None
+
+def allowed_sections(settings, user):
+    """Sections the user may see/control, or None if the user is an admin (all sections)."""
+    if str(user.id) in settings.get('AdminIDs', []):
+        return None
+    allowed = set()
+    for role in user.roles:
+        allowed.update(settings.get('AllowedRoles', {}).get(str(role.id), []))
+    return allowed
+
 def check_settings_file():
-    config_path = Path("/config/settings.json")
+    config_path = CONFIG_PATH
     logger.info(f"Checking for settings file...")
     
     try:
@@ -52,4 +66,5 @@ def check_settings_file():
         raise
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     check_settings_file()

@@ -1,4 +1,4 @@
-FROM alpine:3.23
+FROM alpine:3.24
 
 WORKDIR /src
 RUN mkdir /config
@@ -6,12 +6,15 @@ RUN mkdir /config
 COPY src/ .
 COPY src/entrypoint.sh /entrypoint.sh
 
-RUN apk add docker-cli python3 py3-pip tzdata su-exec
+# Official static docker CLI: Alpine's docker-cli package lags behind on CVE fixes
+COPY --from=docker:29.9.1-cli /usr/local/bin/docker /usr/local/bin/docker
+RUN apk add python3 tzdata su-exec
 
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-RUN pip3 install discord.py prettytable setuptools>=78.1.1
+# pip is only needed at build time; removing it drops its vendored urllib3/msgpack CVEs
+RUN pip3 install discord.py prettytable "setuptools>=78.1.1" && pip3 uninstall -y pip
 
 # Non-Root Docker
 RUN addgroup -S -g 988 docker && \
