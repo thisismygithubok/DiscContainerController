@@ -11,7 +11,7 @@ RUN apk add docker-cli python3 py3-pip tzdata su-exec
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-RUN pip3 install discord.py prettytable setuptools>=78.1.1
+RUN pip3 install discord.py prettytable "setuptools>=78.1.1"
 
 # Non-Root Docker
 RUN addgroup -S -g 988 docker && \

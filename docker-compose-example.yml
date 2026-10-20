@@ -1,6 +1,6 @@
 services:
   DiscContainerController:
-    image: thisismynameok/disccontainercontroller:latest
+    image: thisismynameok/disc-container-controller:latest
     container_name: DiscContainerController
     environment:
       DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
@@ -8,5 +8,6 @@ services:
       TZ: ${TZ}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./config:/config
     labels:
       section: "Example"

@@ -17,7 +17,7 @@ This bot has several slash commands to use:
 
 ## Docker Run ##
 ```
-docker run -e DISCORD_GUILD_ID=<your_guild_id> -e DISCORD_BOT_TOKEN=<your_bot_token> -e TZ=<your_tz> -v /var/run/docker.sock:/var/run/docker.sock -l section=<section_name> thisismynameok/disc-container-controller:latest
+docker run -e DISCORD_GUILD_ID=<your_guild_id> -e DISCORD_BOT_TOKEN=<your_bot_token> -e TZ=<your_tz> -v /var/run/docker.sock:/var/run/docker.sock -v ./config:/config -l section=<section_name> thisismynameok/disc-container-controller:latest
 ```
 
 ## Docker Compose ##
@@ -48,21 +48,21 @@ You need to mount the docker sock as a volume to the container to be able to con
 ```
 volumes:
     - /var/run/docker.sock:/var/run/docker.sock
-    - ./config:config
+    - ./config:/config
 ```
 
 ## Labels ##
-You need to add container labels called 'section' to categorize and list your containers in a more friendly manner.
+You need to add container labels called 'section' to categorize and list your containers in a more friendly manner. Containers without a section label are listed as "Uncategorized" (visible to admins only, unless a role is allowed "Uncategorized").
 ```
 labels:
     section: "Game Servers"
 ```
 
 ## Settings ##
-A settings.json file will be generated in your mounted config folder.
+A settings.json file will be generated in your mounted config folder. It is re-read on every command, so changes apply without restarting the bot.
 - AdminIDs - this is a discord user ID, and these IDs will have permissions to see/control all containers within all sections.
 - AllowedRoles - this is a dict of role IDs and the sections those roles are allowed to see/control
-- Sections - these are the sections you've defined via container labels. These are necessary to see/control containers.
+- Sections - a reference list of the sections you've defined via container labels. It is informational only; access is controlled by AdminIDs and AllowedRoles.
 - Example:
 ```
 {
