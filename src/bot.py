@@ -9,12 +9,8 @@ from discord.ext import commands
 discord.VoiceClient.warn_nacl = False
 discord.VoiceClient.warn_dave = False
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-    force=True
-)
+# discord.py's root handler colours output when the stream supports it.
+discord.utils.setup_logging(level=logging.INFO, root=True)
 logger = logging.getLogger(__name__)
 
 DISCORD_BOT_TOKEN = os.environ.get('DISCORD_BOT_TOKEN')
