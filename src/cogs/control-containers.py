@@ -67,6 +67,46 @@ class ContainerPaginationView(discord.ui.View):
         self.update_select_menu()
         await interaction.response.edit_message(view=self)
 
+async def run_action(interaction: discord.Interaction, container_name: str, action: str):
+    """Re-check permission, run the docker action and report it. The interaction must already be responded to."""
+    # Re-check permission at action time: settings may have changed since the menu was shown.
+    try:
+        containers = await list_containers()
+        settings = load_settings()
+        allowed = allowed_sections(settings, interaction.user) if settings else set()
+    except (RuntimeError, ValueError) as e:
+        logger.error(f'Error checking permission: {e}')
+        await interaction.followup.send('Error checking permission - see service logs.', ephemeral=True)
+        return
+    if container_name not in [c[0] for c in permitted(containers, allowed)]:
+        logger.warning(f'{interaction.user} ({interaction.user.id}) denied {action} on {container_name}: no permission')
+        await interaction.followup.send(f'You do not have permission to control {container_name}', ephemeral=True)
+        return
+
+    code, _, err = await docker(action, container_name)
+    if code != 0:
+        logger.error(f'{container_name} failed to {action}: {err.strip()}')
+        await interaction.followup.send(f'{interaction.user.mention} failed to {action} {container_name} - see service logs.')
+        return
+    past = {'start': 'started', 'stop': 'stopped', 'restart': 'restarted'}[action]
+    logger.info(f'{container_name} successfully {past}')
+    await interaction.followup.send(f'{interaction.user.mention} {container_name} has been {past}')
+
+class confirmStopView(discord.ui.View):
+    def __init__(self, container_name: str, *, timeout=30):
+        super().__init__(timeout=timeout)
+        self.container_name = container_name
+
+    @discord.ui.button(label="Stop", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content=f'Stopping {self.container_name}...', view=None)
+        await run_action(interaction, self.container_name, 'stop')
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        logger.info(f'{interaction.user} ({interaction.user.id}) cancelled stop on {self.container_name}')
+        await interaction.response.edit_message(content=f'Cancelled - {self.container_name} was not stopped.', view=None)
+
 class selectAction(discord.ui.Select):
     def __init__(self):
         options=[
@@ -92,30 +132,13 @@ class selectAction(discord.ui.Select):
         action = self.values[0].lower()
         # User ID too: usernames can change, IDs can't
         logger.info(f'{interaction.user} ({interaction.user.id}) requested {action} on {container_name}')
+
+        if action == 'stop':
+            await interaction.response.send_message(f'Stop **{container_name}**?', view=confirmStopView(container_name), ephemeral=True, delete_after=30)
+            return
+
         await interaction.response.defer()
-
-        # Re-check permission at action time: settings may have changed since the menu was shown.
-        try:
-            containers = await list_containers()
-            settings = load_settings()
-            allowed = allowed_sections(settings, interaction.user) if settings else set()
-        except (RuntimeError, ValueError) as e:
-            logger.error(f'Error checking permission: {e}')
-            await interaction.followup.send('Error checking permission - see service logs.', ephemeral=True)
-            return
-        if container_name not in [c[0] for c in permitted(containers, allowed)]:
-            logger.warning(f'{interaction.user} ({interaction.user.id}) denied {action} on {container_name}: no permission')
-            await interaction.followup.send(f'You do not have permission to control {container_name}', ephemeral=True)
-            return
-
-        code, _, err = await docker(action, container_name)
-        if code != 0:
-            logger.error(f'{container_name} failed to {action}: {err.strip()}')
-            await interaction.followup.send(f'{interaction.user.mention} failed to {action} {container_name} - see service logs.')
-            return
-        past = {'start': 'started', 'stop': 'stopped', 'restart': 'restarted'}[action]
-        logger.info(f'{container_name} successfully {past}')
-        await interaction.followup.send(f'{interaction.user.mention} {container_name} has been {past}')
+        await run_action(interaction, container_name, action)
 
 class selectContainerName(discord.ui.Select):
     def __init__(self, containers):

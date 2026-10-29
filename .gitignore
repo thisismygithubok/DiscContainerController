@@ -6,3 +6,4 @@ sync*.sh
 *.bat
 docker-compose.yml
 /config*
+__pycache__/
