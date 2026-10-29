@@ -90,7 +90,8 @@ class selectAction(discord.ui.Select):
             return
         
         action = self.values[0].lower()
-        logger.debug(f'Reached option "{action}" inside selectAction callback')
+        # User ID too: usernames can change, IDs can't
+        logger.info(f'{interaction.user} ({interaction.user.id}) requested {action} on {container_name}')
         await interaction.response.defer()
 
         # Re-check permission at action time: settings may have changed since the menu was shown.
@@ -103,15 +104,17 @@ class selectAction(discord.ui.Select):
             await interaction.followup.send('Error checking permission - see service logs.', ephemeral=True)
             return
         if container_name not in [c[0] for c in permitted(containers, allowed)]:
+            logger.warning(f'{interaction.user} ({interaction.user.id}) denied {action} on {container_name}: no permission')
             await interaction.followup.send(f'You do not have permission to control {container_name}', ephemeral=True)
             return
 
         code, _, err = await docker(action, container_name)
         if code != 0:
-            logger.error(f'docker {action} {container_name} failed: {err.strip()}')
+            logger.error(f'{container_name} failed to {action}: {err.strip()}')
             await interaction.followup.send(f'{interaction.user.mention} failed to {action} {container_name} - see service logs.')
             return
         past = {'start': 'started', 'stop': 'stopped', 'restart': 'restarted'}[action]
+        logger.info(f'{container_name} successfully {past}')
         await interaction.followup.send(f'{interaction.user.mention} {container_name} has been {past}')
 
 class selectContainerName(discord.ui.Select):
