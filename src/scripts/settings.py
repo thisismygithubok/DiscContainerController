@@ -23,11 +23,15 @@ def load_settings():
 
 def allowed_sections(settings, user):
     """Sections the user may see/control, or None if the user is an admin (all sections)."""
-    if str(user.id) in settings.get('AdminIDs', []):
+    # map(str): IDs may be written as JSON numbers or strings
+    if str(user.id) in map(str, settings.get('AdminIDs', [])):
         return None
+    roles = settings.get('AllowedRoles', {})
+    if not isinstance(roles, dict):
+        raise ValueError('AllowedRoles in settings.json must be an object of {"<role id>": [sections]}')
     allowed = set()
     for role in user.roles:
-        allowed.update(settings.get('AllowedRoles', {}).get(str(role.id), []))
+        allowed.update(roles.get(str(role.id), []))
     return allowed
 
 def check_settings_file():
@@ -66,5 +70,14 @@ def check_settings_file():
         raise
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-    check_settings_file()
+    from types import SimpleNamespace as NS
+    user = NS(id=42, roles=[NS(id=7)])
+    assert allowed_sections({'AdminIDs': [42]}, user) is None
+    assert allowed_sections({'AdminIDs': ['42']}, user) is None
+    assert allowed_sections({'AllowedRoles': {'7': ['Games']}}, user) == {'Games'}
+    try:
+        allowed_sections({'AllowedRoles': []}, user)
+        raise AssertionError('list AllowedRoles accepted')
+    except ValueError:
+        pass
+    print("ok")

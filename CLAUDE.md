@@ -14,8 +14,10 @@ There is no test suite, linter, or CI. Everything is built and run via Docker.
 # Build locally (native arch)
 docker build -t dcc-test .
 
-# Self-check for the docker-output parser and permission filter (the only test)
-python3 src/scripts/containers.py          # or inside the image: python3 scripts/containers.py
+# Self-checks (the only tests): docker-output parser, permission filter, settings, embed packing
+python3 src/scripts/containers.py
+python3 src/scripts/settings.py
+cd src && DISCORD_GUILD_ID=1 PYTHONPATH=. python3 cogs/list-containers.py   # needs discord.py; easiest inside the image
 
 # Run the bot locally (needs a real token/guild; see "Testing" below)
 docker run --rm -e DISCORD_BOT_TOKEN=... -e DISCORD_GUILD_ID=... \

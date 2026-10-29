@@ -88,7 +88,7 @@ A settings.json file will be generated in your mounted config folder. It is re-r
     - Name it whatever you'd like the app to be named, in this case I've used "DiscContainerController"
 3. On the "General Information" page, give it a name and description.
 4. On the "Installation" page, change the install link to "None"
-5. On the "Bot" page, disable "Public Bot", and enable "Message Content Intent"  
+5. On the "Bot" page, disable "Public Bot". No privileged intents are needed.  
     - On this same page, make sure to copy your TOKEN as you'll need to pass this to the container
 6. On the "OAuth2" page, in the OAuth2 URL Generator section, choose "bot".
     - In the "Bot Permissions" section below this, in text permissions, choose "Send Messages" and "Manage Messages".

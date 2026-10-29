@@ -1,5 +1,4 @@
 import os
-import asyncio
 import discord
 import logging
 from discord import app_commands
@@ -26,11 +25,6 @@ class ContainerPaginationView(discord.ui.View):
         self.total_pages = (len(containers) - 1) // self.items_per_page + 1
         
         logger.debug(f"Creating pagination view with {len(containers)} containers")
-        
-        # Initialize without buttons first
-        self.prev_button = None
-        self.next_button = None
-        
         self.update_select_menu()
 
     def update_select_menu(self):
@@ -45,25 +39,23 @@ class ContainerPaginationView(discord.ui.View):
         
         # Add navigation buttons if needed
         if len(self.containers) > self.items_per_page:
-            self.prev_button = discord.ui.Button(
+            prev_button = discord.ui.Button(
                 label="Previous",
                 style=discord.ButtonStyle.gray,
                 disabled=(self.current_page == 0),
                 custom_id="prev"
             )
-            self.next_button = discord.ui.Button(
+            next_button = discord.ui.Button(
                 label="Next",
                 style=discord.ButtonStyle.gray,
                 disabled=(self.current_page >= self.total_pages - 1),
                 custom_id="next"
             )
             
-            # Bind callback functions
-            self.prev_button.callback = self.prev_callback
-            self.next_button.callback = self.next_callback
-            
-            self.add_item(self.prev_button)
-            self.add_item(self.next_button)
+            prev_button.callback = self.prev_callback
+            next_button.callback = self.next_callback
+            self.add_item(prev_button)
+            self.add_item(next_button)
 
     async def prev_callback(self, interaction: discord.Interaction):
         self.current_page = max(0, self.current_page - 1)
@@ -104,12 +96,12 @@ class selectAction(discord.ui.Select):
         # Re-check permission at action time: settings may have changed since the menu was shown.
         try:
             containers = await list_containers()
-        except RuntimeError as e:
-            logger.error(f'Error executing docker command: {e}')
-            await interaction.followup.send('Error retrieving container list - see service logs.', ephemeral=True)
+            settings = load_settings()
+            allowed = allowed_sections(settings, interaction.user) if settings else set()
+        except (RuntimeError, ValueError) as e:
+            logger.error(f'Error checking permission: {e}')
+            await interaction.followup.send('Error checking permission - see service logs.', ephemeral=True)
             return
-        settings = load_settings()
-        allowed = allowed_sections(settings, interaction.user) if settings else set()
         if container_name not in [c[0] for c in permitted(containers, allowed)]:
             await interaction.followup.send(f'You do not have permission to control {container_name}', ephemeral=True)
             return
@@ -134,17 +126,8 @@ class selectContainerName(discord.ui.Select):
         selected_container = self.values[0]
         await interaction.response.defer(ephemeral=True)
         action_view = chooseActionView(selected_container)
-        action_message = await interaction.followup.send(view=action_view, ephemeral=True)
-        async def delete_after_delay():
-            await asyncio.sleep(30)
-            try:
-                if action_message is not None:
-                    await action_message.delete()
-            except discord.NotFound:
-                pass
-            except Exception as e:
-                logger.error(f'Error deleting message: {e}')
-        asyncio.create_task(delete_after_delay())
+        action_message = await interaction.followup.send(view=action_view, ephemeral=True, wait=True)
+        await action_message.delete(delay=30)
 
 class controlContainers(commands.Cog):
     def __init__(self, bot):
@@ -177,12 +160,10 @@ class controlContainers(commands.Cog):
             view = ContainerPaginationView(containers)
             logger.debug(f'Filtered containers by permission: {containers}')
 
-            await interaction.response.send_message(view=view, ephemeral=True)
-            await asyncio.sleep(30)
-            await interaction.delete_original_response()
+            await interaction.response.send_message(view=view, ephemeral=True, delete_after=30)
 
-        except RuntimeError as e:
-            logger.error(f'Error executing docker command: {e}')
+        except (RuntimeError, ValueError) as e:
+            logger.error(f'Error building container list: {e}')
             await interaction.response.send_message(
                 'Error retrieving container list - see service logs.',
                 ephemeral=True
