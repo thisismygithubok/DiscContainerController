@@ -25,7 +25,7 @@ if not DISCORD_GUILD_ID or not DISCORD_GUILD_ID.isdigit():
     raise ValueError("DISCORD_GUILD_ID is required to run the bot")
 
 # Slash commands only: no privileged message_content intent needed.
-bot = commands.Bot(command_prefix=lambda bot, message: [], intents=discord.Intents.default(), command_tree_cls=app_commands.CommandTree)
+bot = commands.Bot(command_prefix=[], intents=discord.Intents.default(), command_tree_cls=app_commands.CommandTree)
 
 async def load_cogs():
     for filename in os.listdir('./cogs'):
