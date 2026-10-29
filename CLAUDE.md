@@ -14,8 +14,11 @@ There is no test suite, linter, or CI. Everything is built and run via Docker.
 # Build locally (native arch)
 docker build -t dcc-test .
 
-# Self-check for the docker-output parser and permission filter (the only test)
-python3 src/scripts/containers.py          # or inside the image: python3 scripts/containers.py
+# Self-checks (the only tests; also run by `docker build`, which fails if one fails):
+# docker-output parser, permission filter, settings, embed packing
+python3 src/scripts/containers.py
+python3 src/scripts/settings.py
+cd src && DISCORD_GUILD_ID=1 PYTHONPATH=. python3 cogs/list-containers.py   # needs discord.py; easiest inside the image
 
 # Run the bot locally (needs a real token/guild; see "Testing" below)
 docker run --rm -e DISCORD_BOT_TOKEN=... -e DISCORD_GUILD_ID=... \
@@ -38,9 +41,9 @@ Docker Hub image name is `thisismynameok/disc-container-controller` (hyphenated)
 
 - `src/bot.py` — entry point. Validates `DISCORD_BOT_TOKEN`/`DISCORD_GUILD_ID`, then in `setup_hook` (runs once) ensures `settings.json`, loads every `cogs/*.py` as an extension, and syncs commands to the guild. `command_prefix` returns `[]` so text messages are ignored.
 - `src/cogs/` — one cog per slash command (`/ping`, `/list-containers`, `/control-container`). Each command is guild-scoped with `@app_commands.guilds(...)`; there is intentionally no `copy_global_to`. Cog filenames contain hyphens, so they are only loadable as extensions, not importable normally.
-- `src/scripts/containers.py` — the only place that runs docker. Async `create_subprocess_exec`; `list_containers()` returns `[(name, state, section)]` from a single `docker ps -a --format '{{.Names}}\t{{.State}}\t{{.Label "section"}}'`. Don't reintroduce per-container `docker inspect` (blocks the event loop and prints `<no value>` for missing labels).
+- `src/scripts/containers.py` — the only place that runs docker. Async `create_subprocess_exec`; `list_containers()` returns `[(name, state, section)]` from a single `docker ps -a --format '{{.ID}}\t{{.Names}}\t{{.State}}\t{{.Label "section"}}'`, leaving out the bot's own container (matched by `HOSTNAME` = short container ID). Don't reintroduce per-container `docker inspect` (blocks the event loop and prints `<no value>` for missing labels).
 - `src/scripts/settings.py` — `/config/settings.json` lifecycle and permissions. `allowed_sections(settings, user)` returns `None` for admins (meaning *all* sections) or a set of sections from the user's roles; `containers.permitted()` filters on that. Settings are re-read on every command, so edits apply without a restart.
-- `/control-container` flow: paginated select (24 per page + Prev/Next) showing status → action select → `docker start|stop|restart`. Permission is re-checked in the action callback, and the docker return code is reported. UI messages auto-delete after 30s.
+- `/control-container` flow: paginated select (24 per page + Prev/Next) showing status → action select → (Stop asks for confirmation) → `docker start|stop|restart`. Every request and outcome is logged with the user's name and ID. Permission is re-checked in the action callback, and the docker return code is reported. UI messages auto-delete after 30s.
 
 ### Permissions model (settings.json)
 
@@ -54,7 +57,7 @@ Docker Hub image name is `thisismynameok/disc-container-controller` (hyphenated)
 - `src/entrypoint.sh` runs as root: applies `TZ`, then adds `nonroot` to whatever group owns the mounted `docker.sock` (host GIDs vary; the image's 988 default isn't relied on), then `exec su-exec nonroot`.
 - The docker CLI binary is copied from the official `docker:<ver>-cli` image instead of Alpine's `docker-cli` package, because Alpine's lagged on CVE fixes. Bump that tag for CLI security fixes.
 - pip is uninstalled from the runtime venv after install (removes vendored-library CVEs), so nothing can be pip-installed at runtime.
-- `discord.py` is unpinned.
+- `discord.py` is pinned in the dockerfile; bump it deliberately.
 
 ## Logging
 

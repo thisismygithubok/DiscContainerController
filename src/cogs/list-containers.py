@@ -1,16 +1,48 @@
 import os
-import asyncio
 import discord
 import logging
 from discord import app_commands
 from discord.ext import commands
-from prettytable import PrettyTable
 from scripts.settings import load_settings, allowed_sections
 from scripts.containers import list_containers, permitted
 
 logger = logging.getLogger(__name__)
 
 DISCORD_GUILD_ID = os.environ.get('DISCORD_GUILD_ID')
+
+# Discord limits: 4096 chars per embed description, 6000 chars and 10 embeds per message.
+DESCRIPTION_LIMIT = 4000
+MESSAGE_LIMIT = 6000
+EMBEDS_PER_MESSAGE = 10
+
+def build_embeds(sections):
+    """One embed per section (split if a section's table is too long), as [Embed]."""
+    width = max([20] + [len(name) for rows in sections.values() for name, _ in rows])
+    header = f"{'Container Name':<{width}}  Status\n{'-' * width}  -------\n"
+    embeds = []
+    for section, rows in sorted(sections.items()):
+        lines = [f"{name:<{width}}  {status}\n" for name, status in sorted(rows)]
+        chunk = ''
+        for line in lines + [None]:
+            if line is None or len(header) + len(chunk) + len(line) + 8 > DESCRIPTION_LIMIT:
+                embeds.append(discord.Embed(title=f"Section: {section}", description=f"```\n{header}{chunk}```", color=discord.Color.blue()))
+                chunk = ''
+            if line is not None:
+                chunk += line
+    return embeds
+
+def pack_messages(embeds):
+    """Group embeds into messages that fit Discord's per-message limits."""
+    messages, current, size = [], [], 0
+    for embed in embeds:
+        if current and (len(current) == EMBEDS_PER_MESSAGE or size + len(embed) > MESSAGE_LIMIT):
+            messages.append(current)
+            current, size = [], 0
+        current.append(embed)
+        size += len(embed)
+    if current:
+        messages.append(current)
+    return messages
 
 class ListContainers(commands.Cog):
     def __init__(self, bot):
@@ -33,60 +65,37 @@ class ListContainers(commands.Cog):
 
             sections = {}
             for container, status, section in permitted(await list_containers(), allowed):
-                sections.setdefault(section, []).append([container, status.capitalize()])
+                sections.setdefault(section, []).append((container, status.capitalize()))
 
             logger.debug(f'Container status: {sections}')
 
             if not sections:
                 await interaction.response.send_message('No containers found.', ephemeral=True, delete_after=30)
-            else:
-                max_container_length = max(
-                    len(container[0]) 
-                    for section_containers in sections.values() 
-                    for container in section_containers
-                )
-                table_width = max(max_container_length, 20)
+                return
 
-                embeds = []
-                for section, containers in sorted(sections.items()):
-                    table = PrettyTable()
-                    table.field_names = ['Container Name', 'Status']
-                    table.max_width['Container Name'] = table_width
-                    table.max_width['Status'] = 9  # fixed width for status
-                    table.min_width['Container Name'] = table_width
-                    table.min_width['Status'] = 6
-                    table.align['Container Name'] = 'l'  # center align names
-                    table.align['Status'] = 'l'  # center align status
-                    table.add_rows(sorted(containers))  # sort containers within each section
-                    
-                    embed = discord.Embed(
-                        title=f"Section: {section}",
-                        description=f"```\n{table}```",
-                        color=discord.Color.blue()
-                    )
-                    embeds.append(embed)
+            for i, chunk in enumerate(pack_messages(build_embeds(sections))):
+                if i == 0:
+                    await interaction.response.send_message(embeds=chunk, ephemeral=True, delete_after=30)
+                else:
+                    message = await interaction.followup.send(embeds=chunk, ephemeral=True, wait=True)
+                    await message.delete(delay=30)
 
-                # Discord allows max 10 embeds per message
-                for i in range(0, len(embeds), 10):
-                    chunk = embeds[i:i + 10]
-                    if i == 0:
-                        await interaction.response.send_message(embeds=chunk, ephemeral=True, delete_after=30)
-                    else:
-                        embed_list = await interaction.followup.send(embeds=chunk, ephemeral=True)
-                        async def delete_after_delay():
-                            await asyncio.sleep(30)
-                            try:
-                                if embed_list is not None:
-                                    await embed_list.delete()
-                            except discord.NotFound:
-                                pass
-                            except Exception as e:
-                                logger.error(f'Error deleting message: {e}')
-                        asyncio.create_task(delete_after_delay())
-
-        except RuntimeError as e:
-            logger.error(f'Error executing docker command: {e}')
-            await interaction.response.send_message(f'Error encountered in dockerlist - see service logs.', ephemeral=True, delete_after=30)
+        except (RuntimeError, ValueError, discord.HTTPException) as e:
+            logger.error(f'Error in list-containers: {e}')
+            send = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
+            await send('Error listing containers - see service logs.', ephemeral=True)
 
 async def setup(bot):
   await bot.add_cog(ListContainers(bot))
+
+if __name__ == "__main__":
+    # Run from src/: DISCORD_GUILD_ID=1 PYTHONPATH=. python3 cogs/list-containers.py
+    big = {f'S{s}': [(f'container-{s}-{i}', 'Running') for i in range(150)] for s in range(3)}
+    embeds = build_embeds(big)
+    assert all(len(e.description) <= 4096 for e in embeds)
+    assert sum(e.description.count('container-') for e in embeds) == 450
+    messages = pack_messages(embeds)
+    assert all(len(m) <= 10 and sum(len(e) for e in m) <= 6000 for m in messages)
+    assert sum(len(m) for m in messages) == len(embeds)
+    assert len(build_embeds({'A': [('web', 'Running')]})) == 1
+    print("ok")

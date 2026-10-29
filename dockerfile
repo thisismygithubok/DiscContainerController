@@ -3,18 +3,23 @@ FROM alpine:3.24
 WORKDIR /src
 RUN mkdir /config
 
-COPY src/ .
-COPY src/entrypoint.sh /entrypoint.sh
-
 # Official static docker CLI: Alpine's docker-cli package lags behind on CVE fixes
 COPY --from=docker:29.9.1-cli /usr/local/bin/docker /usr/local/bin/docker
-RUN apk add python3 tzdata su-exec
+RUN apk add --no-cache python3 tzdata su-exec
 
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # pip is only needed at build time; removing it drops its vendored urllib3/msgpack CVEs
-RUN pip3 install discord.py prettytable "setuptools>=78.1.1" && pip3 uninstall -y pip
+# Pinned so a rebuild can't pull a breaking discord.py release; bump deliberately
+RUN pip3 install discord.py==2.7.1 && pip3 uninstall -y pip
+
+# Copy code after dependencies so code changes don't re-run the install layers
+COPY src/ .
+COPY src/entrypoint.sh /entrypoint.sh
+
+# Fail the build if a self-check fails
+RUN PYTHONDONTWRITEBYTECODE=1 sh -c 'python3 scripts/containers.py && python3 scripts/settings.py && DISCORD_GUILD_ID=1 PYTHONPATH=. python3 cogs/list-containers.py'
 
 # Non-Root Docker
 RUN addgroup -S -g 988 docker && \
