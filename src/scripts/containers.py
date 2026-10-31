@@ -1,5 +1,12 @@
 import os
 import asyncio
+import logging
+import aiohttp
+
+logger = logging.getLogger(__name__)
+
+ACTIONS = ('start', 'stop', 'restart')
+AGENT_TIMEOUT = aiohttp.ClientTimeout(total=15)
 
 # shortcut: Docker sets HOSTNAME to the 12-char container ID; a custom `hostname:` in compose makes the bot list itself again.
 SELF_ID = os.environ.get('HOSTNAME', '')
@@ -28,6 +35,43 @@ async def list_containers():
     if code != 0:
         raise RuntimeError(err.strip())
     return parse_ps(out, SELF_ID)
+
+async def agent_request(host, method, path):
+    """Call a remote agent ({"url", "token"} from settings Hosts). Returns (HTTP status, JSON body)."""
+    headers = {'Authorization': f'Bearer {host["token"]}'}
+    async with aiohttp.ClientSession(timeout=AGENT_TIMEOUT, headers=headers) as session:
+        async with session.request(method, host['url'].rstrip('/') + path) as resp:
+            return resp.status, await resp.json()
+
+async def list_remote(host_name, host):
+    status, data = await agent_request(host, 'GET', '/containers')
+    if status != 200:
+        raise RuntimeError(f'HTTP {status}: {data}')
+    return [(f'{host_name}/{name}', state, section) for name, state, section in data]
+
+async def list_all(hosts):
+    """Local containers plus each agent's as "<host>/<container>". Unreachable agents are logged and skipped."""
+    containers = await list_containers()
+    results = await asyncio.gather(*(list_remote(n, h) for n, h in hosts.items()), return_exceptions=True)
+    for host_name, result in zip(hosts, results):
+        if isinstance(result, BaseException):
+            logger.warning(f'Agent {host_name} unavailable, skipping its containers: {result!r}')
+        else:
+            containers.extend(result)
+    return containers
+
+async def control(name, action, hosts):
+    """Start/stop/restart a local container or a "<host>/<container>" on an agent. Returns (returncode, error)."""
+    # Docker names can't contain '/', so everything before the last one is the host.
+    host_name, _, container = name.rpartition('/')
+    if not host_name:
+        code, _, err = await docker(action, container)
+        return code, err.strip()
+    try:
+        status, data = await agent_request(hosts[host_name], 'POST', f'/containers/{container}/{action}')
+    except (aiohttp.ClientError, asyncio.TimeoutError, KeyError) as e:
+        return 1, repr(e)
+    return (0, '') if status == 200 else (1, f'HTTP {status}: {data}')
 
 def permitted(containers, allowed):
     """Containers in the allowed sections; allowed=None means admin (everything)."""

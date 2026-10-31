@@ -81,9 +81,38 @@ A settings.json file will be generated in your mounted config folder. It is re-r
         "Backend",
         "Frontend",
         "Game Servers"
-    ]
+    ],
+    "Hosts": {
+        "server2": {
+            "url": "http://100.64.0.2:8080",
+            "token": "<the agent's AGENT_TOKEN>"
+        }
+    }
 }
 ```
+- Hosts - remote agents (see [Remote Hosts](#remote-hosts)). Leave it as `{}` to only control the local host.
+
+## Remote Hosts ##
+To control containers on other servers, run the same image as an agent on each one, then add it to `Hosts` in settings.json. The agent's containers then appear in the bot as `<host name>/<container name>`. Section labels and permissions work the same as for local containers. If an agent can't be reached, its containers are left out and a warning is logged.
+
+```
+services:
+  DiscContainerAgent:
+    image: thisismynameok/disc-container-controller:latest
+    container_name: DiscContainerAgent
+    command: ["python3", "agent.py"]
+    environment:
+      AGENT_TOKEN: ${AGENT_TOKEN}   # at least 32 characters, e.g. `openssl rand -hex 32`
+      TZ: ${TZ}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "100.64.0.2:8080:8080"     # bind to a private (VPN) address, not 0.0.0.0
+```
+- AGENT_TOKEN (required) - shared secret; put the same value in the master's settings.json `Hosts` entry.
+- AGENT_PORT (optional, default 8080) - port the agent listens on inside the container.
+
+The agent can only list, start, stop and restart containers on its host, and it never lists or controls itself. Everyone with the token has that power, and the token is sent in plain HTTP. **Only expose the agent on a private network (Tailscale, WireGuard, LAN) or behind a TLS reverse proxy (then use an `https://` url) - never directly on the internet.**
 
 ## Logging ##
 The bot logs to the container output (`docker logs DiscContainerController`). Every container action is logged with the Discord username and user ID, for example:

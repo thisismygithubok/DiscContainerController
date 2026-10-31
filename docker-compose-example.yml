@@ -11,3 +11,16 @@ services:
       - ./config:/config
     labels:
       section: "Example"
+
+  # Optional: run this on another server instead, and add it to Hosts in the master's settings.json
+  # DiscContainerAgent:
+  #   image: thisismynameok/disc-container-controller:latest
+  #   container_name: DiscContainerAgent
+  #   command: ["python3", "agent.py"]
+  #   environment:
+  #     AGENT_TOKEN: ${AGENT_TOKEN}
+  #     TZ: ${TZ}
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   ports:
+  #     - "<private ip>:8080:8080"

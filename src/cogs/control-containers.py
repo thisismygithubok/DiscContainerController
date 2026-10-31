@@ -3,8 +3,8 @@ import discord
 import logging
 from discord import app_commands
 from discord.ext import commands
-from scripts.settings import load_settings, allowed_sections
-from scripts.containers import docker, list_containers, permitted
+from scripts.settings import load_settings, allowed_sections, remote_hosts
+from scripts.containers import control, list_all, permitted
 
 logger = logging.getLogger(__name__)
 
@@ -71,9 +71,10 @@ async def run_action(interaction: discord.Interaction, container_name: str, acti
     """Re-check permission, run the docker action and report it. The interaction must already be responded to."""
     # Re-check permission at action time: settings may have changed since the menu was shown.
     try:
-        containers = await list_containers()
-        settings = load_settings()
+        settings = load_settings() or {}
         allowed = allowed_sections(settings, interaction.user) if settings else set()
+        hosts = remote_hosts(settings)
+        containers = await list_all(hosts)
     except (RuntimeError, ValueError) as e:
         logger.error(f'Error checking permission: {e}')
         await interaction.followup.send('Error checking permission - see service logs.', ephemeral=True)
@@ -83,9 +84,9 @@ async def run_action(interaction: discord.Interaction, container_name: str, acti
         await interaction.followup.send(f'You do not have permission to control {container_name}', ephemeral=True)
         return
 
-    code, _, err = await docker(action, container_name)
+    code, err = await control(container_name, action, hosts)
     if code != 0:
-        logger.error(f'{container_name} failed to {action}: {err.strip()}')
+        logger.error(f'{container_name} failed to {action}: {err}')
         await interaction.followup.send(f'{interaction.user.mention} failed to {action} {container_name} - see service logs.')
         return
     past = {'start': 'started', 'stop': 'stopped', 'restart': 'restarted'}[action]
@@ -175,7 +176,7 @@ class controlContainers(commands.Cog):
                 await interaction.response.send_message('You do not have permission to control any sections', ephemeral=True)
                 return
 
-            containers = permitted(await list_containers(), allowed)
+            containers = permitted(await list_all(remote_hosts(settings)), allowed)
 
             if not containers:
                 await interaction.response.send_message('No containers available to control.', ephemeral=True)

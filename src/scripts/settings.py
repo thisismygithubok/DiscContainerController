@@ -7,7 +7,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_SETTINGS = {
     "AdminIDs": [],
     "AllowedRoles": {},
-    "Sections": []
+    "Sections": [],
+    "Hosts": {}
 }
 
 CONFIG_PATH = Path("/config/settings.json")
@@ -33,6 +34,13 @@ def allowed_sections(settings, user):
     for role in user.roles:
         allowed.update(roles.get(str(role.id), []))
     return allowed
+
+def remote_hosts(settings):
+    """Remote agents as {"<name>": {"url": ..., "token": ...}}."""
+    hosts = settings.get('Hosts', {})
+    if not isinstance(hosts, dict) or not all(isinstance(h, dict) and 'url' in h and 'token' in h for h in hosts.values()):
+        raise ValueError('Hosts in settings.json must be an object of {"<name>": {"url": "...", "token": "..."}}')
+    return hosts
 
 def check_settings_file():
     config_path = CONFIG_PATH
@@ -80,4 +88,12 @@ if __name__ == "__main__":
         raise AssertionError('list AllowedRoles accepted')
     except ValueError:
         pass
+    assert remote_hosts({}) == {}
+    assert remote_hosts({'Hosts': {'a': {'url': 'u', 'token': 't'}}}) == {'a': {'url': 'u', 'token': 't'}}
+    for bad in ([], {'a': {'url': 'u'}}):
+        try:
+            remote_hosts({'Hosts': bad})
+            raise AssertionError(f'bad Hosts accepted: {bad}')
+        except ValueError:
+            pass
     print("ok")
