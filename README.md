@@ -49,7 +49,7 @@ environment:
 ```
 
 ## Volumes ##
-You need to mount the docker sock as a volume to the container to be able to control containers. You also need to mount a config directory for the setting.json to be generated into
+You need to mount the docker sock as a volume to the container to be able to control containers (or use a [socket proxy](#docker-socket-proxy-optional) instead). You also need to mount a config directory for the setting.json to be generated into
 ```
 volumes:
     - /var/run/docker.sock:/var/run/docker.sock
@@ -153,6 +153,44 @@ environment:
 Host names must be unique, can't contain `/`, and can't be the same as `LocalName`; a host whose name breaks these rules is skipped and an error is logged. Upgrading from v1.0.7: rename `"Hosts"` to `"SecondaryHosts"` in settings.json. The v1.0.7 object form `{"server2": {"url": ..., "token": ...}}` still works (the key is the name).
 
 The agent can only list, start, stop and restart containers on its host, and it never lists or controls itself. Everyone with the token has that power, and the token is sent in plain HTTP. **Only expose the agent on a private network (Tailscale, WireGuard, LAN) or behind a TLS reverse proxy (then use an `https://` url) - never directly on the internet.**
+
+## Docker Socket Proxy (optional) ##
+Mounting `docker.sock` gives a container full control of Docker, which is the same as root on the host. Instead, you can run a socket proxy that only lets through the few Docker API calls this bot uses. If the bot or agent were ever compromised, it could then only list, start, stop and restart containers, not create containers, exec into them, or read their settings (e.g. other services' passwords in environment variables).
+
+We suggest [wollomatic/socket-proxy](https://github.com/wollomatic/socket-proxy), which can allow exactly these calls. (tecnativa/docker-socket-proxy can't: allowing start/stop there also allows creating containers.) No bot settings change - remove the `docker.sock` mount and set `DOCKER_HOST`. This works the same for the bot and for an [agent](#remote-hosts):
+```
+services:
+  dcc-socket-proxy:
+    image: wollomatic/socket-proxy:1.13.2
+    container_name: dcc-socket-proxy
+    restart: always
+    group_add:
+      - "988"    # GID that owns the host's docker.sock: `stat -c %g /var/run/docker.sock`
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - -listenip=0.0.0.0
+      - -allowfrom=DiscContainerController    # only this container may connect
+      - -allowGET=/v1\.[0-9]+/(_ping|version|info|containers/json)|/_ping
+      - -allowHEAD=/_ping|/v1\.[0-9]+/_ping
+      - -allowPOST=/v1\.[0-9]+/containers/[a-zA-Z0-9][a-zA-Z0-9_.-]*/(start|stop|restart)
+    networks: [dcc-proxy]
+    # no ports: - the proxy must only be reachable on the internal network
+
+  DiscContainerController:
+    # ...as above, but without the docker.sock volume, plus:
+    environment:
+      DOCKER_HOST: tcp://dcc-socket-proxy:2375
+    networks: [dcc-proxy, default]    # default: needed to reach Discord (and agents)
+    depends_on: [dcc-socket-proxy]
+
+networks:
+  dcc-proxy:
+    internal: true
+```
+- For an agent, use `-allowfrom=DiscContainerController-Agent`. The agent's own port stays on the default network as before.
+- Blocked calls are logged by the proxy (`docker logs dcc-socket-proxy`) and show up in the bot as a failed action.
+- The proxy does not know about Discord permissions: the bot can still start, stop or restart any container on that host (permissions are enforced by the bot). The proxy itself still has full access to Docker, so never publish its port.
 
 ## Logging ##
 The bot logs to the container output (`docker logs DiscContainerController`). Every container action is logged with the Discord username and user ID, for example:
