@@ -45,22 +45,23 @@ def local_name(settings):
     return name
 
 def remote_hosts(settings):
-    """Remote agents as [{"url", "token", optional "name"}]. The v1.0.7 form {"<name>": {...}} is still accepted.
-    An entry can give "token_env" (an env var name) instead of "token", keeping the token out of settings.json."""
+    """Remote agents as [{"url", "token", optional "name"}]. An entry can give "token_env" (an env var name)
+    instead of "token", keeping the token out of settings.json. Invalid entries are logged and skipped,
+    so one bad host doesn't stop the bot controlling the others."""
     hosts = settings.get('SecondaryHosts', [])
-    if isinstance(hosts, dict):
-        hosts = [{**h, 'name': name} if isinstance(h, dict) else h for name, h in hosts.items()]
-    if not isinstance(hosts, list) or not all(
-            isinstance(h, dict) and 'url' in h and ('token' in h or 'token_env' in h) and '/' not in str(h.get('name', '')) for h in hosts):
-        raise ValueError('SecondaryHosts in settings.json must be a list of {"url": "...", "token_env": "<env var>" or "token": "...", "name": "<optional, no />"}')
+    if not isinstance(hosts, list):
+        raise ValueError('SecondaryHosts in settings.json must be a list of {"url": "...", "token_env": "<env var>", "name": "<optional>"}')
     resolved = []
     for h in hosts:
-        if 'token_env' in h:
-            if not os.environ.get(h['token_env']):
-                # Names the variable only; the token itself is never logged or shown
-                raise ValueError(f'SecondaryHosts entry {h["url"]}: environment variable {h["token_env"]} is not set in the bot container')
-            h = {**h, 'token': os.environ[h['token_env']]}
-        resolved.append(h)
+        # Log only the url: an invalid entry may still hold a token
+        url = h.get('url') if isinstance(h, dict) else None
+        if not url or not ('token' in h or 'token_env' in h) or '/' in str(h.get('name', '')):
+            logger.error(f'Skipping SecondaryHosts entry {url!r}: it needs "url", "token_env" (or "token"), and a "name" without "/" if set')
+        elif 'token_env' in h and not os.environ.get(h['token_env']):
+            # Names the variable only; the token itself is never logged or shown
+            logger.error(f'Skipping SecondaryHosts entry {url}: environment variable {h["token_env"]} is not set in the bot container')
+        else:
+            resolved.append({**h, 'token': os.environ[h['token_env']]} if 'token_env' in h else h)
     return resolved
 
 def check_settings_file():
@@ -81,6 +82,9 @@ def check_settings_file():
                 current_settings = json.load(f)
                 logger.debug(f"Settings file already exists, loading...")
             
+            if 'Hosts' in current_settings:
+                logger.warning('settings.json has "Hosts", which is ignored since v1.0.8: rename it to "SecondaryHosts" (a list, see README)')
+
             updated = False
             for key, value in DEFAULT_SETTINGS.items():
                 if key not in current_settings:
@@ -99,6 +103,7 @@ def check_settings_file():
         raise
 
 if __name__ == "__main__":
+    logging.disable()  # the skip cases below log errors on purpose
     from types import SimpleNamespace as NS
     user = NS(id=42, roles=[NS(id=7)])
     assert allowed_sections({'AdminIDs': [42]}, user) is None
@@ -110,16 +115,18 @@ if __name__ == "__main__":
     except ValueError:
         pass
     assert remote_hosts({}) == []
-    assert remote_hosts({'SecondaryHosts': {'a': {'url': 'u', 'token': 't'}}}) == [{'url': 'u', 'token': 't', 'name': 'a'}]
     assert remote_hosts({'SecondaryHosts': [{'url': 'u', 'token': 't'}]}) == [{'url': 'u', 'token': 't'}]
     assert local_name({}) == DEFAULT_SETTINGS['LocalName'] and local_name({'LocalName': 'server-pc'}) == 'server-pc'
     os.environ['DCC_TEST_TOKEN'] = 'from-env'
     assert remote_hosts({'SecondaryHosts': [{'url': 'u', 'token_env': 'DCC_TEST_TOKEN'}]})[0]['token'] == 'from-env'
     os.environ.pop('DCC_UNSET_TOKEN', None)
-    for bad in ({'a': {'url': 'u'}}, [{'url': 'u', 'token': 't', 'name': 'a/b'}], 'x', [{'url': 'u', 'token_env': 'DCC_UNSET_TOKEN'}]):
+    good = {'url': 'ok', 'token': 't'}
+    bad_entries = [{'url': 'u'}, {'url': 'u', 'token': 't', 'name': 'a/b'}, 'x', {'token': 't'}, {'url': 'u', 'token_env': 'DCC_UNSET_TOKEN'}]
+    assert remote_hosts({'SecondaryHosts': bad_entries + [good]}) == [good], 'bad entries must be skipped, good ones kept'
+    for bad in ({'a': {'url': 'u', 'token': 't'}}, 'x'):
         try:
             remote_hosts({'SecondaryHosts': bad})
-            raise AssertionError(f'bad SecondaryHosts accepted: {bad}')
+            raise AssertionError(f'non-list SecondaryHosts accepted: {bad}')
         except ValueError:
             pass
     print("ok")

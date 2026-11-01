@@ -150,7 +150,7 @@ environment:
    The token is never logged or shown in Discord. Anyone with Docker access on the master's host can still read it (`docker inspect` shows environment variables), as can anyone who can read the `.env` file, so keep `.env` private (`chmod 600 .env`).
 4. Run `/list-containers` - the remote containers appear as `server2/<container name>`.
 
-Host names must be unique, can't contain `/`, and can't be the same as `LocalName`; a host whose name breaks these rules is skipped and an error is logged. Upgrading from v1.0.7: rename `"Hosts"` to `"SecondaryHosts"` in settings.json. The v1.0.7 object form `{"server2": {"url": ..., "token": ...}}` still works (the key is the name).
+Host names must be unique, can't contain `/`, and can't be the same as `LocalName`. A host entry that breaks these rules, is missing `url`/`token_env`, or whose `token_env` variable isn't set, is skipped and an error is logged; the other hosts keep working. Upgrading from v1.0.7: `"Hosts": {"server2": {...}}` is now a list called `SecondaryHosts`, so `"SecondaryHosts": [{"name": "server2", ...}]`. The bot logs a warning at startup while settings.json still has `"Hosts"`.
 
 The agent can only list, start, stop and restart containers on its host, and it never lists or controls itself. Everyone with the token has that power, and the token is sent in plain HTTP. **Only expose the agent on a private network (Tailscale, WireGuard, LAN) or behind a TLS reverse proxy (then use an `https://` url) - never directly on the internet.**
 

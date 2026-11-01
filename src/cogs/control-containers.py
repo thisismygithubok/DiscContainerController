@@ -80,6 +80,12 @@ async def run_action(interaction: discord.Interaction, container_name: str, acti
         logger.error(f'Error checking permission: {e}')
         await interaction.followup.send('Error checking permission - see service logs.', ephemeral=True)
         return
+    host = container_host(container_name, local)
+    # A host that returned no containers didn't answer (named hosts skip the /info lookup, so `hosts` can't tell)
+    if host != local and not any(container_host(c[0], local) == host for c in containers):
+        logger.warning(f'{interaction.user} ({interaction.user.id}) {action} on {container_name} failed: {host} unreachable')
+        await interaction.followup.send(f'{host} is unreachable - try again later.', ephemeral=True)
+        return
     if container_name not in [c[0] for c in permitted(containers, allowed, local)]:
         logger.warning(f'{interaction.user} ({interaction.user.id}) denied {action} on {container_name}: no permission')
         await interaction.followup.send(f'You do not have permission to control {container_name}', ephemeral=True)
