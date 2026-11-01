@@ -21,8 +21,23 @@ This bot has several slash commands to use. You only see the containers your [se
     - Third: The bot posts a message mentioning you once the action has completed, or if it failed
 
 ## Docker Run ##
+Bot (the `--name` matters: the [logging](#logging) and [socket proxy](#docker-socket-proxy-optional) examples use it):
 ```
-docker run -e DISCORD_GUILD_ID=<your_guild_id> -e DISCORD_BOT_TOKEN=<your_bot_token> -e TZ=<your_tz> -v /var/run/docker.sock:/var/run/docker.sock -v ./config:/config -l section=<section_name> thisismynameok/disc-container-controller:latest
+docker run -d --name DiscContainerController --restart always --pull always \
+  -e DISCORD_GUILD_ID=<your_guild_id> -e DISCORD_BOT_TOKEN=<your_bot_token> -e TZ=<your_tz> \
+  -v /var/run/docker.sock:/var/run/docker.sock -v ./config:/config \
+  -l section=<section_name> \
+  thisismynameok/disc-container-controller:latest
+```
+With [remote hosts](#remote-hosts), also pass each agent's token under the name its `token_env` uses, e.g. `-e SERVER2_AGENT_TOKEN=<the agent's AGENT_TOKEN>`.
+
+Agent, on another server (bind the port to a private address, see [Remote Hosts](#remote-hosts)):
+```
+docker run -d --name DiscContainerController-Agent --restart always --pull always \
+  -e AGENT_TOKEN=<openssl rand -hex 32> -e TZ=<your_tz> \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -p <private ip>:8080:8080 \
+  thisismynameok/disc-container-controller:latest python3 agent.py
 ```
 
 ## Docker Compose ##
