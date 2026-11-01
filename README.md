@@ -142,7 +142,7 @@ Setup:
 ```
 4. Run `/list-containers` - the remote containers appear as `server2/<container name>`.
 
-Host names must be unique, can't contain `/`, and can't be the same as `LocalName`; a host whose name breaks these rules is skipped and an error is logged. Settings from v1.0.7 used `"Hosts": {"server2": {"url": ..., "token": ...}}`; the bot renames `Hosts` to `SecondaryHosts` on startup, and that object form still works (the key is the name).
+Host names must be unique, can't contain `/`, and can't be the same as `LocalName`; a host whose name breaks these rules is skipped and an error is logged. Upgrading from v1.0.7: rename `"Hosts"` to `"SecondaryHosts"` in settings.json. The v1.0.7 object form `{"server2": {"url": ..., "token": ...}}` still works (the key is the name).
 
 The agent can only list, start, stop and restart containers on its host, and it never lists or controls itself. Everyone with the token has that power, and the token is sent in plain HTTP. **Only expose the agent on a private network (Tailscale, WireGuard, LAN) or behind a TLS reverse proxy (then use an `https://` url) - never directly on the internet.**
 

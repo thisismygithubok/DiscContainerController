@@ -72,11 +72,6 @@ def check_settings_file():
                 logger.debug(f"Settings file already exists, loading...")
             
             updated = False
-            # v1.0.7 called it "Hosts"; rename before defaults are filled in, or it would be shadowed by an empty SecondaryHosts
-            if 'Hosts' in current_settings and 'SecondaryHosts' not in current_settings:
-                current_settings['SecondaryHosts'] = current_settings.pop('Hosts')
-                logger.info('Renamed "Hosts" to "SecondaryHosts" in settings.json')
-                updated = True
             for key, value in DEFAULT_SETTINGS.items():
                 if key not in current_settings:
                     current_settings[key] = value
@@ -114,14 +109,4 @@ if __name__ == "__main__":
             raise AssertionError(f'bad SecondaryHosts accepted: {bad}')
         except ValueError:
             pass
-
-    import tempfile
-    with tempfile.TemporaryDirectory() as d:
-        CONFIG_PATH = Path(d) / 'settings.json'
-        old_hosts = {'pi': {'url': 'u', 'token': 't'}}
-        CONFIG_PATH.write_text(json.dumps({'AdminIDs': ['1'], 'Hosts': old_hosts}))
-        check_settings_file()
-        migrated = json.loads(CONFIG_PATH.read_text())
-        assert 'Hosts' not in migrated and migrated['SecondaryHosts'] == old_hosts and migrated['AdminIDs'] == ['1'], migrated
-        assert migrated['LocalName'] == 'primary-node'
     print("ok")
