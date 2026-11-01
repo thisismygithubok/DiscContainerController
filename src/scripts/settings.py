@@ -8,7 +8,8 @@ DEFAULT_SETTINGS = {
     "AdminIDs": [],
     "AllowedRoles": {},
     "Sections": [],
-    "Hosts": {}
+    "LocalName": "primary-node",
+    "Hosts": []
 }
 
 CONFIG_PATH = Path("/config/settings.json")
@@ -35,11 +36,21 @@ def allowed_sections(settings, user):
         allowed.update(roles.get(str(role.id), []))
     return allowed
 
+def local_name(settings):
+    """Name of the bot's own host, used in the host menu and "<host>/..." permissions."""
+    name = settings.get('LocalName') or 'primary-node'
+    if not isinstance(name, str) or '/' in name:
+        raise ValueError('LocalName in settings.json must be a name without "/"')
+    return name
+
 def remote_hosts(settings):
-    """Remote agents as {"<name>": {"url": ..., "token": ...}}."""
-    hosts = settings.get('Hosts', {})
-    if not isinstance(hosts, dict) or not all(isinstance(h, dict) and 'url' in h and 'token' in h for h in hosts.values()):
-        raise ValueError('Hosts in settings.json must be an object of {"<name>": {"url": "...", "token": "..."}}')
+    """Remote agents as [{"url", "token", optional "name"}]. The v1.0.7 form {"<name>": {...}} is still accepted."""
+    hosts = settings.get('Hosts', [])
+    if isinstance(hosts, dict):
+        hosts = [{**h, 'name': name} if isinstance(h, dict) else h for name, h in hosts.items()]
+    if not isinstance(hosts, list) or not all(
+            isinstance(h, dict) and 'url' in h and 'token' in h and '/' not in str(h.get('name', '')) for h in hosts):
+        raise ValueError('Hosts in settings.json must be a list of {"url": "...", "token": "...", "name": "<optional, no />"}')
     return hosts
 
 def check_settings_file():
@@ -88,9 +99,11 @@ if __name__ == "__main__":
         raise AssertionError('list AllowedRoles accepted')
     except ValueError:
         pass
-    assert remote_hosts({}) == {}
-    assert remote_hosts({'Hosts': {'a': {'url': 'u', 'token': 't'}}}) == {'a': {'url': 'u', 'token': 't'}}
-    for bad in ([], {'a': {'url': 'u'}}):
+    assert remote_hosts({}) == []
+    assert remote_hosts({'Hosts': {'a': {'url': 'u', 'token': 't'}}}) == [{'url': 'u', 'token': 't', 'name': 'a'}]
+    assert remote_hosts({'Hosts': [{'url': 'u', 'token': 't'}]}) == [{'url': 'u', 'token': 't'}]
+    assert local_name({}) == 'primary-node' and local_name({'LocalName': 'server-pc'}) == 'server-pc'
+    for bad in ({'a': {'url': 'u'}}, [{'url': 'u', 'token': 't', 'name': 'a/b'}], 'x'):
         try:
             remote_hosts({'Hosts': bad})
             raise AssertionError(f'bad Hosts accepted: {bad}')

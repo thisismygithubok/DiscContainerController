@@ -43,6 +43,28 @@ async def agent_request(host, method, path):
         async with session.request(method, host['url'].rstrip('/') + path) as resp:
             return resp.status, await resp.json()
 
+async def host_name(host):
+    """The host's configured name, else the agent's docker host name."""
+    if host.get('name'):
+        return host['name']
+    status, data = await agent_request(host, 'GET', '/info')
+    if status != 200:
+        raise RuntimeError(f'HTTP {status}: {data}')
+    return data['name']
+
+async def resolve_hosts(hosts, local):
+    """{"<name>": host} for reachable agents. Name lookups that fail, and duplicate names, are logged and skipped."""
+    names = await asyncio.gather(*(host_name(h) for h in hosts), return_exceptions=True)
+    named = {}
+    for host, name in zip(hosts, names):
+        if isinstance(name, BaseException):
+            logger.warning(f'Agent {host["url"]} unavailable, skipping its containers: {name!r}')
+        elif not isinstance(name, str) or not name or '/' in name or name == local or name in named:
+            logger.error(f'Agent {host["url"]} has an invalid or duplicate name {name!r}; set a unique "name" for it in Hosts')
+        else:
+            named[name] = host
+    return named
+
 async def list_remote(host_name, host):
     status, data = await agent_request(host, 'GET', '/containers')
     if status != 200:
@@ -73,14 +95,34 @@ async def control(name, action, hosts):
         return 1, repr(e)
     return (0, '') if status == 200 else (1, f'HTTP {status}: {data}')
 
-def permitted(containers, allowed):
-    """Containers in the allowed sections; allowed=None means admin (everything)."""
-    return [c for c in containers if allowed is None or c[2] in allowed]
+def container_host(name, local):
+    return name.rpartition('/')[0] or local
+
+def permitted(containers, allowed, local):
+    """Containers the allowed entries cover: "<section>" (any host), "<host>/<section>" or "<host>/*".
+    allowed=None means admin (everything); local is the name of the bot's own host."""
+    if allowed is None:
+        return list(containers)
+    return [c for c in containers if allowed & {c[2], f'{container_host(c[0], local)}/{c[2]}', f'{container_host(c[0], local)}/*'}]
 
 if __name__ == "__main__":
     parsed = parse_ps("aaa\tweb\trunning\tGame Servers\nbbb\tdb\texited\t\nccc\tbot\trunning\tBackend\n\n", 'ccc')
     assert parsed == [('web', 'running', 'Game Servers'), ('db', 'exited', 'Uncategorized')], parsed
-    assert permitted(parsed, None) == parsed
-    assert permitted(parsed, {'Game Servers'}) == [parsed[0]]
-    assert permitted(parsed, set()) == []
+    assert permitted(parsed, None, 'primary-node') == parsed
+    assert permitted(parsed, {'Game Servers'}, 'primary-node') == [parsed[0]]
+    assert permitted(parsed, set(), 'primary-node') == []
+    mixed = parsed + [('pi/hawser', 'running', 'Uncategorized'), ('pi/games', 'running', 'Game Servers')]
+    assert permitted(mixed, {'Game Servers'}, 'primary-node') == [mixed[0], mixed[3]]
+    assert permitted(mixed, {'pi/*'}, 'primary-node') == mixed[2:]
+    assert permitted(mixed, {'pi/Game Servers'}, 'primary-node') == [mixed[3]]
+    assert permitted(mixed, {'primary-node/*'}, 'primary-node') == parsed
+    assert permitted(mixed, {'primary-node/Uncategorized'}, 'primary-node') == [mixed[1]]
+
+    async def fake_request(host, method, path):
+        return (200, {'name': host['reported']}) if host['reported'] else (404, {'error': 'not found'})
+    agent_request = fake_request
+    hosts = [{'url': 'a', 'token': 't', 'name': 'pi'}, {'url': 'b', 'token': 't', 'reported': 'nas'},
+             {'url': 'c', 'token': 't', 'reported': 'nas'}, {'url': 'd', 'token': 't', 'reported': None},
+             {'url': 'e', 'token': 't', 'reported': 'primary-node'}, {'url': 'f', 'token': 't', 'reported': 'x/y'}]
+    assert asyncio.run(resolve_hosts(hosts, 'primary-node')) == {'pi': hosts[0], 'nas': hosts[1]}
     print("ok")

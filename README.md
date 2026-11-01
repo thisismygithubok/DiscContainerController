@@ -14,7 +14,8 @@ This bot has several slash commands to use. You only see the containers your [se
 - /list-containers - lists the containers you can see, grouped by section, with their status
 - Containers on [remote hosts](#remote-hosts) are shown as `<host name>/<container name>`
 - /control-container - this is an interactive command:
-    - First: You choose a container (24 per page, with Previous/Next buttons if there are more)
+    - First: If you can see containers on more than one host, you choose the host (shown with how many containers you can see on it). Otherwise this step is skipped.
+    - Then: You choose a container (24 per page, with Previous/Next buttons if there are more)
     - Second: You choose an action of start, stop, or restart
     - Stop asks you to confirm first
     - Third: The bot posts a message mentioning you once the action has completed, or if it failed
@@ -67,8 +68,13 @@ labels:
 ## Settings ##
 A settings.json file will be generated in your mounted config folder. It is re-read on every command, so changes apply without restarting the bot.
 - AdminIDs - a list of discord user IDs; these users can see/control all containers in all sections, including "Uncategorized". IDs can be written as strings or numbers.
-- AllowedRoles - a dict of role IDs and the sections those roles are allowed to see/control. A user with several roles gets the sections of all of them. Users with no admin ID and no allowed role see nothing.
+- AllowedRoles - a dict of role IDs and what those roles are allowed to see/control. A user with several roles gets everything all of them allow. Users with no admin ID and no allowed role see nothing. Each entry is one of:
+    - `"<section>"` - that section on every host (e.g. `"Game Servers"`)
+    - `"<host>/<section>"` - that section on one host only (e.g. `"pikvm/Backend"`, `"primary-node/Game Servers"`)
+    - `"<host>/*"` - every container on that host, including "Uncategorized" (e.g. `"pikvm/*"`)
 - Sections - a reference list of the sections you've defined via container labels. It is informational only; access is controlled by AdminIDs and AllowedRoles.
+- LocalName - the name of the bot's own host, shown in the host menu and used in `"<host>/..."` permissions. Defaults to `"primary-node"`.
+- Hosts - remote agents (see [Remote Hosts](#remote-hosts)). Leave it as `[]` to only control the local host.
 - Example:
 ```
 {
@@ -78,6 +84,10 @@ A settings.json file will be generated in your mounted config folder. It is re-r
     "AllowedRoles": {
         "0101010987654321": [
             "Game Servers"
+        ],
+        "1111111111111111": [
+            "pikvm/*",
+            "primary-node/Backend"
         ]
     },
     "Sections": [
@@ -85,18 +95,18 @@ A settings.json file will be generated in your mounted config folder. It is re-r
         "Frontend",
         "Game Servers"
     ],
-    "Hosts": {
-        "server2": {
+    "LocalName": "primary-node",
+    "Hosts": [
+        {
             "url": "http://100.64.0.2:8080",
             "token": "<the agent's AGENT_TOKEN>"
         }
-    }
+    ]
 }
 ```
-- Hosts - remote agents (see [Remote Hosts](#remote-hosts)). Leave it as `{}` to only control the local host.
 
 ## Remote Hosts ##
-To control containers on other servers, run the same image as an agent on each one, then add it to `Hosts` in settings.json. The agent's containers then appear in the bot as `<host name>/<container name>`. Section labels and permissions work the same as for local containers. If an agent can't be reached, its containers are left out and a warning is logged.
+To control containers on other servers, run the same image as an agent on each one, then add it to `Hosts` in settings.json. The agent's containers then appear in the bot as `<host name>/<container name>`. Section labels work the same as for local containers, and permissions can also be limited to a host (see [Settings](#settings)). If an agent can't be reached, its containers are left out and a warning is logged.
 
 ```
 services:
@@ -120,16 +130,19 @@ services:
 Setup:
 1. Generate a token: `openssl rand -hex 32`
 2. Start the agent on the remote server with that token (compose above).
-3. Add the host to the master's settings.json (no restart needed):
+3. Add the host to the master's settings.json (no restart needed). `name` is optional; without it the host is named after the remote server's hostname:
 ```
-"Hosts": {
-    "server2": {
+"Hosts": [
+    {
         "url": "http://100.64.0.2:8080",
-        "token": "<the agent's AGENT_TOKEN>"
+        "token": "<the agent's AGENT_TOKEN>",
+        "name": "server2"
     }
-}
+]
 ```
 4. Run `/list-containers` - the remote containers appear as `server2/<container name>`.
+
+Host names must be unique, can't contain `/`, and can't be the same as `LocalName`; a host whose name breaks these rules is skipped and an error is logged. The older form `"Hosts": {"server2": {"url": ..., "token": ...}}` still works (the key is the name).
 
 The agent can only list, start, stop and restart containers on its host, and it never lists or controls itself. Everyone with the token has that power, and the token is sent in plain HTTP. **Only expose the agent on a private network (Tailscale, WireGuard, LAN) or behind a TLS reverse proxy (then use an `https://` url) - never directly on the internet.**
 

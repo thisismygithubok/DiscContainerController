@@ -32,6 +32,14 @@ async def get_containers(request):
         logger.error(f'Error listing containers: {e}')
         return web.json_response({'error': str(e)}, status=500)
 
+async def get_info(request):
+    # Default display name for the master: the docker host's hostname, not this container's ID
+    code, out, err = await docker('info', '--format', '{{.Name}}')
+    if code != 0:
+        logger.error(f'Error reading docker info: {err.strip()}')
+        return web.json_response({'error': err.strip()}, status=500)
+    return web.json_response({'name': out.strip()})
+
 async def post_action(request):
     name, action = request.match_info['name'], request.match_info['action']
     if action not in ACTIONS:
@@ -54,7 +62,7 @@ async def post_action(request):
     return web.json_response({'ok': True})
 
 app = web.Application(middlewares=[auth])
-app.add_routes([web.get('/containers', get_containers), web.post('/containers/{name}/{action}', post_action)])
+app.add_routes([web.get('/info', get_info), web.get('/containers', get_containers), web.post('/containers/{name}/{action}', post_action)])
 
 logger.info(f"Starting agent on port {AGENT_PORT}...")
 web.run_app(app, port=AGENT_PORT, access_log=None, print=None)

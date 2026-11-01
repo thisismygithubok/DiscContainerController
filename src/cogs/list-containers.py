@@ -3,8 +3,8 @@ import discord
 import logging
 from discord import app_commands
 from discord.ext import commands
-from scripts.settings import load_settings, allowed_sections, remote_hosts
-from scripts.containers import list_all, permitted
+from scripts.settings import load_settings, allowed_sections, remote_hosts, local_name
+from scripts.containers import list_all, permitted, resolve_hosts
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,9 @@ class ListContainers(commands.Cog):
                 return
 
             sections = {}
-            for container, status, section in permitted(await list_all(remote_hosts(settings)), allowed):
+            local = local_name(settings)
+            hosts = await resolve_hosts(remote_hosts(settings), local)
+            for container, status, section in permitted(await list_all(hosts), allowed, local):
                 sections.setdefault(section, []).append((container, status.capitalize()))
 
             logger.debug(f'Container status: {sections}')
