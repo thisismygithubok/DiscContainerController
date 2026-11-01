@@ -3,8 +3,8 @@ import discord
 import logging
 from discord import app_commands
 from discord.ext import commands
-from scripts.settings import load_settings, allowed_sections, remote_hosts
-from scripts.containers import control, list_all, permitted
+from scripts.settings import load_settings, allowed_sections, remote_hosts, local_name
+from scripts.containers import container_host, control, list_all, permitted, resolve_hosts
 
 logger = logging.getLogger(__name__)
 
@@ -73,13 +73,20 @@ async def run_action(interaction: discord.Interaction, container_name: str, acti
     try:
         settings = load_settings() or {}
         allowed = allowed_sections(settings, interaction.user) if settings else set()
-        hosts = remote_hosts(settings)
+        local = local_name(settings)
+        hosts = await resolve_hosts(remote_hosts(settings), local)
         containers = await list_all(hosts)
     except (RuntimeError, ValueError) as e:
         logger.error(f'Error checking permission: {e}')
         await interaction.followup.send('Error checking permission - see service logs.', ephemeral=True)
         return
-    if container_name not in [c[0] for c in permitted(containers, allowed)]:
+    host = container_host(container_name, local)
+    # A host that returned no containers didn't answer (named hosts skip the /info lookup, so `hosts` can't tell)
+    if host != local and not any(container_host(c[0], local) == host for c in containers):
+        logger.warning(f'{interaction.user} ({interaction.user.id}) {action} on {container_name} failed: {host} unreachable')
+        await interaction.followup.send(f'{host} is unreachable - try again later.', ephemeral=True)
+        return
+    if container_name not in [c[0] for c in permitted(containers, allowed, local)]:
         logger.warning(f'{interaction.user} ({interaction.user.id}) denied {action} on {container_name}: no permission')
         await interaction.followup.send(f'You do not have permission to control {container_name}', ephemeral=True)
         return
@@ -144,7 +151,8 @@ class selectAction(discord.ui.Select):
 class selectContainerName(discord.ui.Select):
     def __init__(self, containers):
         options = [
-            discord.SelectOption(label=name, description=state.capitalize(), emoji="🟢" if state == "running" else "🛑")
+            # Value keeps "<host>/"; the label drops it since the host was picked already (or there is only one)
+            discord.SelectOption(label=name.rpartition('/')[2], value=name, description=state.capitalize(), emoji="🟢" if state == "running" else "🛑")
             for name, state, _ in containers
         ]
         super().__init__(placeholder="Select a container", max_values=1, min_values=1, options=options)
@@ -155,6 +163,21 @@ class selectContainerName(discord.ui.Select):
         action_view = chooseActionView(selected_container)
         action_message = await interaction.followup.send(view=action_view, ephemeral=True, wait=True)
         await action_message.delete(delay=30)
+
+class selectHost(discord.ui.Select):
+    def __init__(self, by_host):
+        self.by_host = by_host
+        # shortcut: Discord allows 25 options per select; more than 25 hosts would need paging here too
+        options = [discord.SelectOption(label=host, description=f'{len(c)} container(s)') for host, c in list(by_host.items())[:25]]
+        super().__init__(placeholder="Select a host", max_values=1, min_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(view=ContainerPaginationView(self.by_host[self.values[0]]))
+
+class chooseHostView(discord.ui.View):
+    def __init__(self, by_host, *, timeout=30):
+        super().__init__(timeout=timeout)
+        self.add_item(selectHost(by_host))
 
 class controlContainers(commands.Cog):
     def __init__(self, bot):
@@ -176,16 +199,22 @@ class controlContainers(commands.Cog):
                 await interaction.response.send_message('You do not have permission to control any sections', ephemeral=True)
                 return
 
-            containers = permitted(await list_all(remote_hosts(settings)), allowed)
+            local = local_name(settings)
+            hosts = await resolve_hosts(remote_hosts(settings), local)
+            containers = permitted(await list_all(hosts), allowed, local)
 
             if not containers:
                 await interaction.response.send_message('No containers available to control.', ephemeral=True)
                 return
 
             containers.sort()
-            logger.debug(f'Creating view with {len(containers)} filtered containers')
-            view = ContainerPaginationView(containers)
             logger.debug(f'Filtered containers by permission: {containers}')
+            by_host = {}
+            for c in containers:
+                by_host.setdefault(container_host(c[0], local), []).append(c)
+            # Host step only when it saves scrolling: the user can see containers on 2+ hosts. Local host first.
+            by_host = dict(sorted(by_host.items(), key=lambda kv: (kv[0] != local, kv[0])))
+            view = chooseHostView(by_host) if len(by_host) > 1 else ContainerPaginationView(containers)
 
             await interaction.response.send_message(view=view, ephemeral=True, delete_after=30)
 

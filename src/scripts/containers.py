@@ -36,12 +36,38 @@ async def list_containers():
         raise RuntimeError(err.strip())
     return parse_ps(out, SELF_ID)
 
+def describe(e):
+    """Error text for logs. Never repr(): aiohttp response errors' repr includes the request headers, i.e. the agent token."""
+    return f'{type(e).__name__}: {e}'
+
 async def agent_request(host, method, path):
-    """Call a remote agent ({"url", "token"} from settings Hosts). Returns (HTTP status, JSON body)."""
+    """Call a remote agent ({"url", "token"} from settings SecondaryHosts). Returns (HTTP status, JSON body)."""
     headers = {'Authorization': f'Bearer {host["token"]}'}
     async with aiohttp.ClientSession(timeout=AGENT_TIMEOUT, headers=headers) as session:
         async with session.request(method, host['url'].rstrip('/') + path) as resp:
             return resp.status, await resp.json()
+
+async def host_name(host):
+    """The host's configured name, else the agent's docker host name."""
+    if host.get('name'):
+        return host['name']
+    status, data = await agent_request(host, 'GET', '/info')
+    if status != 200:
+        raise RuntimeError(f'HTTP {status}: {data}')
+    return data['name']
+
+async def resolve_hosts(hosts, local):
+    """{"<name>": host} for reachable agents. Name lookups that fail, and duplicate names, are logged and skipped."""
+    names = await asyncio.gather(*(host_name(h) for h in hosts), return_exceptions=True)
+    named = {}
+    for host, name in zip(hosts, names):
+        if isinstance(name, BaseException):
+            logger.warning(f'Agent {host["url"]} unavailable, skipping its containers: {describe(name)}')
+        elif not isinstance(name, str) or not name or '/' in name or name == local or name in named:
+            logger.error(f'Agent {host["url"]} has an invalid or duplicate name {name!r}; set a unique "name" for it in SecondaryHosts')
+        else:
+            named[name] = host
+    return named
 
 async def list_remote(host_name, host):
     status, data = await agent_request(host, 'GET', '/containers')
@@ -55,7 +81,7 @@ async def list_all(hosts):
     results = await asyncio.gather(*(list_remote(n, h) for n, h in hosts.items()), return_exceptions=True)
     for host_name, result in zip(hosts, results):
         if isinstance(result, BaseException):
-            logger.warning(f'Agent {host_name} unavailable, skipping its containers: {result!r}')
+            logger.warning(f'Agent {host_name} unavailable, skipping its containers: {describe(result)}')
         else:
             containers.extend(result)
     return containers
@@ -70,17 +96,44 @@ async def control(name, action, hosts):
     try:
         status, data = await agent_request(hosts[host_name], 'POST', f'/containers/{container}/{action}')
     except (aiohttp.ClientError, asyncio.TimeoutError, KeyError) as e:
-        return 1, repr(e)
+        return 1, describe(e)
     return (0, '') if status == 200 else (1, f'HTTP {status}: {data}')
 
-def permitted(containers, allowed):
-    """Containers in the allowed sections; allowed=None means admin (everything)."""
-    return [c for c in containers if allowed is None or c[2] in allowed]
+def container_host(name, local):
+    return name.rpartition('/')[0] or local
+
+def permitted(containers, allowed, local):
+    """Containers the allowed entries cover: "<section>" (any host), "<host>/<section>" or "<host>/*".
+    allowed=None means admin (everything); local is the name of the bot's own host."""
+    if allowed is None:
+        return list(containers)
+    return [c for c in containers if allowed & {c[2], f'{container_host(c[0], local)}/{c[2]}', f'{container_host(c[0], local)}/*'}]
 
 if __name__ == "__main__":
+    local = 'main'  # any name works; deliberately not the default, so these checks can't depend on it
     parsed = parse_ps("aaa\tweb\trunning\tGame Servers\nbbb\tdb\texited\t\nccc\tbot\trunning\tBackend\n\n", 'ccc')
     assert parsed == [('web', 'running', 'Game Servers'), ('db', 'exited', 'Uncategorized')], parsed
-    assert permitted(parsed, None) == parsed
-    assert permitted(parsed, {'Game Servers'}) == [parsed[0]]
-    assert permitted(parsed, set()) == []
+    assert permitted(parsed, None, local) == parsed
+    assert permitted(parsed, {'Game Servers'}, local) == [parsed[0]]
+    assert permitted(parsed, set(), local) == []
+    mixed = parsed + [('pi/hawser', 'running', 'Uncategorized'), ('pi/games', 'running', 'Game Servers')]
+    assert permitted(mixed, {'Game Servers'}, local) == [mixed[0], mixed[3]]
+    assert permitted(mixed, {'pi/*'}, local) == mixed[2:]
+    assert permitted(mixed, {'pi/Game Servers'}, local) == [mixed[3]]
+    assert permitted(mixed, {f'{local}/*'}, local) == parsed
+    assert permitted(mixed, {f'{local}/Uncategorized'}, local) == [mixed[1]]
+
+    async def fake_request(host, method, path):
+        return (200, {'name': host['reported']}) if host['reported'] else (404, {'error': 'not found'})
+    agent_request = fake_request
+    hosts = [{'url': 'a', 'token': 't', 'name': 'pi'}, {'url': 'b', 'token': 't', 'reported': 'nas'},
+             {'url': 'c', 'token': 't', 'reported': 'nas'}, {'url': 'd', 'token': 't', 'reported': None},
+             {'url': 'e', 'token': 't', 'reported': local}, {'url': 'f', 'token': 't', 'reported': 'x/y'}]
+    assert asyncio.run(resolve_hosts(hosts, local)) == {'pi': hosts[0], 'nas': hosts[1]}
+
+    from aiohttp.client_reqrep import RequestInfo
+    from multidict import CIMultiDict, CIMultiDictProxy
+    from yarl import URL
+    info = RequestInfo(URL('http://x'), 'GET', CIMultiDictProxy(CIMultiDict({'Authorization': 'Bearer SECRET'})), URL('http://x'))
+    assert 'SECRET' not in describe(aiohttp.ContentTypeError(info, (), status=502, message='not json'))
     print("ok")
