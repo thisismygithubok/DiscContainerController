@@ -12,7 +12,10 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # pip is only needed at build time; removing it drops its vendored urllib3/msgpack CVEs
 # Pinned so a rebuild can't pull a breaking discord.py release; bump deliberately
-RUN pip3 install discord.py==2.7.1 && pip3 uninstall -y pip
+# Build tools only for this layer: armv7 has no prebuilt wheels for some deps (e.g. audioop-lts)
+RUN apk add --no-cache --virtual .build-deps build-base python3-dev && \
+    pip3 install discord.py==2.7.1 && pip3 uninstall -y pip && \
+    apk del .build-deps
 
 # Copy code after dependencies so code changes don't re-run the install layers
 COPY src/ .

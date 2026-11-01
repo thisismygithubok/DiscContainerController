@@ -1,5 +1,7 @@
 # DiscContainerController
-A docker-based discord bot to control other docker containers on the host. Built with [DiscordPy](https://discordpy.readthedocs.io/en/stable/).
+A docker-based discord bot to control other docker containers on the host, and optionally on other hosts via a lightweight [agent](#remote-hosts). Built with [DiscordPy](https://discordpy.readthedocs.io/en/stable/).
+
+Images are published for `linux/amd64`, `linux/arm64` and `linux/arm/v7` (e.g. Raspberry Pi / PiKVM).
 
 <a href="https://hub.docker.com/r/thisismynameok/disc-container-controller"><img alt="Docker Image Size (tag)" src="https://img.shields.io/docker/image-size/thisismynameok/disc-container-controller/latest?style=for-the-badge">
 <img alt="Docker Pulls" src="https://img.shields.io/docker/pulls/thisismynameok/disc-container-controller?style=for-the-badge"></a>
@@ -10,6 +12,7 @@ A docker-based discord bot to control other docker containers on the host. Built
 This bot has several slash commands to use. You only see the containers your [settings](#settings) allow, and the bot's own container is never listed (so it can't stop itself). The bot's menus and lists are only visible to you and delete themselves after 30 seconds.
 - /ping - does a simple check to see if the bot is online and responding
 - /list-containers - lists the containers you can see, grouped by section, with their status
+- Containers on [remote hosts](#remote-hosts) are shown as `<host name>/<container name>`
 - /control-container - this is an interactive command:
     - First: You choose a container (24 per page, with Previous/Next buttons if there are more)
     - Second: You choose an action of start, stop, or restart
@@ -81,9 +84,54 @@ A settings.json file will be generated in your mounted config folder. It is re-r
         "Backend",
         "Frontend",
         "Game Servers"
-    ]
+    ],
+    "Hosts": {
+        "server2": {
+            "url": "http://100.64.0.2:8080",
+            "token": "<the agent's AGENT_TOKEN>"
+        }
+    }
 }
 ```
+- Hosts - remote agents (see [Remote Hosts](#remote-hosts)). Leave it as `{}` to only control the local host.
+
+## Remote Hosts ##
+To control containers on other servers, run the same image as an agent on each one, then add it to `Hosts` in settings.json. The agent's containers then appear in the bot as `<host name>/<container name>`. Section labels and permissions work the same as for local containers. If an agent can't be reached, its containers are left out and a warning is logged.
+
+```
+services:
+  DiscContainerController-Agent:
+    image: thisismynameok/disc-container-controller:latest
+    container_name: DiscContainerController-Agent
+    command: ["python3", "agent.py"]
+    restart: always
+    environment:
+      AGENT_TOKEN: ${AGENT_TOKEN}   # at least 32 characters, e.g. `openssl rand -hex 32`
+      TZ: ${TZ}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "100.64.0.2:8080:8080"     # bind to a private (VPN) address, not 0.0.0.0
+```
+- AGENT_TOKEN (required) - shared secret; put the same value in the master's settings.json `Hosts` entry.
+- AGENT_PORT (optional, default 8080) - port the agent listens on inside the container.
+- TZ (optional) - set it to the same value as the master so both logs use the same time.
+
+Setup:
+1. Generate a token: `openssl rand -hex 32`
+2. Start the agent on the remote server with that token (compose above).
+3. Add the host to the master's settings.json (no restart needed):
+```
+"Hosts": {
+    "server2": {
+        "url": "http://100.64.0.2:8080",
+        "token": "<the agent's AGENT_TOKEN>"
+    }
+}
+```
+4. Run `/list-containers` - the remote containers appear as `server2/<container name>`.
+
+The agent can only list, start, stop and restart containers on its host, and it never lists or controls itself. Everyone with the token has that power, and the token is sent in plain HTTP. **Only expose the agent on a private network (Tailscale, WireGuard, LAN) or behind a TLS reverse proxy (then use an `https://` url) - never directly on the internet.**
 
 ## Logging ##
 The bot logs to the container output (`docker logs DiscContainerController`). Every container action is logged with the Discord username and user ID, for example:
@@ -92,6 +140,13 @@ steven (123456789012345678) requested restart on plex
 plex successfully restarted
 ```
 Failed actions, cancelled stops, and denied requests (no permission) are logged too.
+
+Agents log every action they run with the master's IP, and every request with a missing or wrong token:
+```
+192.168.2.3 requested restart on beszel-agent
+beszel-agent restart succeeded
+Rejected unauthorized GET /containers from 192.168.2.94
+```
 
 If the bot can't start (for example DISCORD_GUILD_ID isn't a number, or the config folder isn't writable), it exits with an error in the logs instead of running without commands.
 
