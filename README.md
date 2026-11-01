@@ -97,9 +97,9 @@ To control containers on other servers, run the same image as an agent on each o
 
 ```
 services:
-  DiscContainerAgent:
+  DiscContainerController-Agent:
     image: thisismynameok/disc-container-controller:latest
-    container_name: DiscContainerAgent
+    container_name: DiscContainerController-Agent
     command: ["python3", "agent.py"]
     environment:
       AGENT_TOKEN: ${AGENT_TOKEN}   # at least 32 characters, e.g. `openssl rand -hex 32`

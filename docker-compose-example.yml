@@ -13,9 +13,9 @@ services:
       section: "Example"
 
   # Optional: run this on another server instead, and add it to Hosts in the master's settings.json
-  # DiscContainerAgent:
+  # DiscContainerController-Agent:
   #   image: thisismynameok/disc-container-controller:latest
-  #   container_name: DiscContainerAgent
+  #   container_name: DiscContainerController-Agent
   #   command: ["python3", "agent.py"]
   #   environment:
   #     AGENT_TOKEN: ${AGENT_TOKEN}
