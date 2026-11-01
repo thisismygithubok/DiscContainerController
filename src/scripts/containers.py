@@ -110,25 +110,26 @@ def permitted(containers, allowed, local):
     return [c for c in containers if allowed & {c[2], f'{container_host(c[0], local)}/{c[2]}', f'{container_host(c[0], local)}/*'}]
 
 if __name__ == "__main__":
+    local = 'main'  # any name works; deliberately not the default, so these checks can't depend on it
     parsed = parse_ps("aaa\tweb\trunning\tGame Servers\nbbb\tdb\texited\t\nccc\tbot\trunning\tBackend\n\n", 'ccc')
     assert parsed == [('web', 'running', 'Game Servers'), ('db', 'exited', 'Uncategorized')], parsed
-    assert permitted(parsed, None, 'primary-node') == parsed
-    assert permitted(parsed, {'Game Servers'}, 'primary-node') == [parsed[0]]
-    assert permitted(parsed, set(), 'primary-node') == []
+    assert permitted(parsed, None, local) == parsed
+    assert permitted(parsed, {'Game Servers'}, local) == [parsed[0]]
+    assert permitted(parsed, set(), local) == []
     mixed = parsed + [('pi/hawser', 'running', 'Uncategorized'), ('pi/games', 'running', 'Game Servers')]
-    assert permitted(mixed, {'Game Servers'}, 'primary-node') == [mixed[0], mixed[3]]
-    assert permitted(mixed, {'pi/*'}, 'primary-node') == mixed[2:]
-    assert permitted(mixed, {'pi/Game Servers'}, 'primary-node') == [mixed[3]]
-    assert permitted(mixed, {'primary-node/*'}, 'primary-node') == parsed
-    assert permitted(mixed, {'primary-node/Uncategorized'}, 'primary-node') == [mixed[1]]
+    assert permitted(mixed, {'Game Servers'}, local) == [mixed[0], mixed[3]]
+    assert permitted(mixed, {'pi/*'}, local) == mixed[2:]
+    assert permitted(mixed, {'pi/Game Servers'}, local) == [mixed[3]]
+    assert permitted(mixed, {f'{local}/*'}, local) == parsed
+    assert permitted(mixed, {f'{local}/Uncategorized'}, local) == [mixed[1]]
 
     async def fake_request(host, method, path):
         return (200, {'name': host['reported']}) if host['reported'] else (404, {'error': 'not found'})
     agent_request = fake_request
     hosts = [{'url': 'a', 'token': 't', 'name': 'pi'}, {'url': 'b', 'token': 't', 'reported': 'nas'},
              {'url': 'c', 'token': 't', 'reported': 'nas'}, {'url': 'd', 'token': 't', 'reported': None},
-             {'url': 'e', 'token': 't', 'reported': 'primary-node'}, {'url': 'f', 'token': 't', 'reported': 'x/y'}]
-    assert asyncio.run(resolve_hosts(hosts, 'primary-node')) == {'pi': hosts[0], 'nas': hosts[1]}
+             {'url': 'e', 'token': 't', 'reported': local}, {'url': 'f', 'token': 't', 'reported': 'x/y'}]
+    assert asyncio.run(resolve_hosts(hosts, local)) == {'pi': hosts[0], 'nas': hosts[1]}
 
     from aiohttp.client_reqrep import RequestInfo
     from multidict import CIMultiDict, CIMultiDictProxy

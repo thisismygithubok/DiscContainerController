@@ -39,7 +39,7 @@ def allowed_sections(settings, user):
 
 def local_name(settings):
     """Name of the bot's own host, used in the host menu and "<host>/..." permissions."""
-    name = settings.get('LocalName') or 'primary-node'
+    name = settings.get('LocalName') or DEFAULT_SETTINGS['LocalName']
     if not isinstance(name, str) or '/' in name:
         raise ValueError('LocalName in settings.json must be a name without "/"')
     return name
@@ -112,7 +112,7 @@ if __name__ == "__main__":
     assert remote_hosts({}) == []
     assert remote_hosts({'SecondaryHosts': {'a': {'url': 'u', 'token': 't'}}}) == [{'url': 'u', 'token': 't', 'name': 'a'}]
     assert remote_hosts({'SecondaryHosts': [{'url': 'u', 'token': 't'}]}) == [{'url': 'u', 'token': 't'}]
-    assert local_name({}) == 'primary-node' and local_name({'LocalName': 'server-pc'}) == 'server-pc'
+    assert local_name({}) == DEFAULT_SETTINGS['LocalName'] and local_name({'LocalName': 'server-pc'}) == 'server-pc'
     os.environ['DCC_TEST_TOKEN'] = 'from-env'
     assert remote_hosts({'SecondaryHosts': [{'url': 'u', 'token_env': 'DCC_TEST_TOKEN'}]})[0]['token'] == 'from-env'
     os.environ.pop('DCC_UNSET_TOKEN', None)
