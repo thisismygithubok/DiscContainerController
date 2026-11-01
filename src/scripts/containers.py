@@ -37,7 +37,7 @@ async def list_containers():
     return parse_ps(out, SELF_ID)
 
 async def agent_request(host, method, path):
-    """Call a remote agent ({"url", "token"} from settings Hosts). Returns (HTTP status, JSON body)."""
+    """Call a remote agent ({"url", "token"} from settings SecondaryHosts). Returns (HTTP status, JSON body)."""
     headers = {'Authorization': f'Bearer {host["token"]}'}
     async with aiohttp.ClientSession(timeout=AGENT_TIMEOUT, headers=headers) as session:
         async with session.request(method, host['url'].rstrip('/') + path) as resp:
@@ -60,7 +60,7 @@ async def resolve_hosts(hosts, local):
         if isinstance(name, BaseException):
             logger.warning(f'Agent {host["url"]} unavailable, skipping its containers: {name!r}')
         elif not isinstance(name, str) or not name or '/' in name or name == local or name in named:
-            logger.error(f'Agent {host["url"]} has an invalid or duplicate name {name!r}; set a unique "name" for it in Hosts')
+            logger.error(f'Agent {host["url"]} has an invalid or duplicate name {name!r}; set a unique "name" for it in SecondaryHosts')
         else:
             named[name] = host
     return named

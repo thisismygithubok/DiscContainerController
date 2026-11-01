@@ -12,7 +12,7 @@ services:
     labels:
       section: "Example"
 
-  # Optional: run this on another server instead, and add it to Hosts in the master's settings.json
+  # Optional: run this on another server instead, and add it to SecondaryHosts in the master's settings.json
   # DiscContainerController-Agent:
   #   image: thisismynameok/disc-container-controller:latest
   #   container_name: DiscContainerController-Agent

@@ -74,7 +74,7 @@ A settings.json file will be generated in your mounted config folder. It is re-r
     - `"<host>/*"` - every container on that host, including "Uncategorized" (e.g. `"pikvm/*"`)
 - Sections - a reference list of the sections you've defined via container labels. It is informational only; access is controlled by AdminIDs and AllowedRoles.
 - LocalName - the name of the bot's own host, shown in the host menu and used in `"<host>/..."` permissions. Defaults to `"primary-node"`.
-- Hosts - remote agents (see [Remote Hosts](#remote-hosts)). Leave it as `[]` to only control the local host.
+- SecondaryHosts - remote agents on other servers (see [Remote Hosts](#remote-hosts)). Leave it as `[]` to only control the local host.
 - Example:
 ```
 {
@@ -96,7 +96,7 @@ A settings.json file will be generated in your mounted config folder. It is re-r
         "Game Servers"
     ],
     "LocalName": "primary-node",
-    "Hosts": [
+    "SecondaryHosts": [
         {
             "url": "http://100.64.0.2:8080",
             "token": "<the agent's AGENT_TOKEN>"
@@ -106,7 +106,7 @@ A settings.json file will be generated in your mounted config folder. It is re-r
 ```
 
 ## Remote Hosts ##
-To control containers on other servers, run the same image as an agent on each one, then add it to `Hosts` in settings.json. The agent's containers then appear in the bot as `<host name>/<container name>`. Section labels work the same as for local containers, and permissions can also be limited to a host (see [Settings](#settings)). If an agent can't be reached, its containers are left out and a warning is logged.
+To control containers on other servers, run the same image as an agent on each one, then add it to `SecondaryHosts` in settings.json. The agent's containers then appear in the bot as `<host name>/<container name>`. Section labels work the same as for local containers, and permissions can also be limited to a host (see [Settings](#settings)). If an agent can't be reached, its containers are left out and a warning is logged.
 
 ```
 services:
@@ -123,7 +123,7 @@ services:
     ports:
       - "100.64.0.2:8080:8080"     # bind to a private (VPN) address, not 0.0.0.0
 ```
-- AGENT_TOKEN (required) - shared secret; put the same value in the master's settings.json `Hosts` entry.
+- AGENT_TOKEN (required) - shared secret; put the same value in the master's settings.json `SecondaryHosts` entry.
 - AGENT_PORT (optional, default 8080) - port the agent listens on inside the container.
 - TZ (optional) - set it to the same value as the master so both logs use the same time.
 
@@ -132,7 +132,7 @@ Setup:
 2. Start the agent on the remote server with that token (compose above).
 3. Add the host to the master's settings.json (no restart needed). `name` is optional; without it the host is named after the remote server's hostname:
 ```
-"Hosts": [
+"SecondaryHosts": [
     {
         "url": "http://100.64.0.2:8080",
         "token": "<the agent's AGENT_TOKEN>",
@@ -142,7 +142,7 @@ Setup:
 ```
 4. Run `/list-containers` - the remote containers appear as `server2/<container name>`.
 
-Host names must be unique, can't contain `/`, and can't be the same as `LocalName`; a host whose name breaks these rules is skipped and an error is logged. The older form `"Hosts": {"server2": {"url": ..., "token": ...}}` still works (the key is the name).
+Host names must be unique, can't contain `/`, and can't be the same as `LocalName`; a host whose name breaks these rules is skipped and an error is logged. Settings from v1.0.7 used `"Hosts": {"server2": {"url": ..., "token": ...}}`; the bot renames `Hosts` to `SecondaryHosts` on startup, and that object form still works (the key is the name).
 
 The agent can only list, start, stop and restart containers on its host, and it never lists or controls itself. Everyone with the token has that power, and the token is sent in plain HTTP. **Only expose the agent on a private network (Tailscale, WireGuard, LAN) or behind a TLS reverse proxy (then use an `https://` url) - never directly on the internet.**
 

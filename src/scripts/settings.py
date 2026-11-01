@@ -9,7 +9,7 @@ DEFAULT_SETTINGS = {
     "AllowedRoles": {},
     "Sections": [],
     "LocalName": "primary-node",
-    "Hosts": []
+    "SecondaryHosts": []
 }
 
 CONFIG_PATH = Path("/config/settings.json")
@@ -45,12 +45,12 @@ def local_name(settings):
 
 def remote_hosts(settings):
     """Remote agents as [{"url", "token", optional "name"}]. The v1.0.7 form {"<name>": {...}} is still accepted."""
-    hosts = settings.get('Hosts', [])
+    hosts = settings.get('SecondaryHosts', [])
     if isinstance(hosts, dict):
         hosts = [{**h, 'name': name} if isinstance(h, dict) else h for name, h in hosts.items()]
     if not isinstance(hosts, list) or not all(
             isinstance(h, dict) and 'url' in h and 'token' in h and '/' not in str(h.get('name', '')) for h in hosts):
-        raise ValueError('Hosts in settings.json must be a list of {"url": "...", "token": "...", "name": "<optional, no />"}')
+        raise ValueError('SecondaryHosts in settings.json must be a list of {"url": "...", "token": "...", "name": "<optional, no />"}')
     return hosts
 
 def check_settings_file():
@@ -72,6 +72,11 @@ def check_settings_file():
                 logger.debug(f"Settings file already exists, loading...")
             
             updated = False
+            # v1.0.7 called it "Hosts"; rename before defaults are filled in, or it would be shadowed by an empty SecondaryHosts
+            if 'Hosts' in current_settings and 'SecondaryHosts' not in current_settings:
+                current_settings['SecondaryHosts'] = current_settings.pop('Hosts')
+                logger.info('Renamed "Hosts" to "SecondaryHosts" in settings.json')
+                updated = True
             for key, value in DEFAULT_SETTINGS.items():
                 if key not in current_settings:
                     current_settings[key] = value
@@ -100,13 +105,23 @@ if __name__ == "__main__":
     except ValueError:
         pass
     assert remote_hosts({}) == []
-    assert remote_hosts({'Hosts': {'a': {'url': 'u', 'token': 't'}}}) == [{'url': 'u', 'token': 't', 'name': 'a'}]
-    assert remote_hosts({'Hosts': [{'url': 'u', 'token': 't'}]}) == [{'url': 'u', 'token': 't'}]
+    assert remote_hosts({'SecondaryHosts': {'a': {'url': 'u', 'token': 't'}}}) == [{'url': 'u', 'token': 't', 'name': 'a'}]
+    assert remote_hosts({'SecondaryHosts': [{'url': 'u', 'token': 't'}]}) == [{'url': 'u', 'token': 't'}]
     assert local_name({}) == 'primary-node' and local_name({'LocalName': 'server-pc'}) == 'server-pc'
     for bad in ({'a': {'url': 'u'}}, [{'url': 'u', 'token': 't', 'name': 'a/b'}], 'x'):
         try:
-            remote_hosts({'Hosts': bad})
-            raise AssertionError(f'bad Hosts accepted: {bad}')
+            remote_hosts({'SecondaryHosts': bad})
+            raise AssertionError(f'bad SecondaryHosts accepted: {bad}')
         except ValueError:
             pass
+
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        CONFIG_PATH = Path(d) / 'settings.json'
+        old_hosts = {'pi': {'url': 'u', 'token': 't'}}
+        CONFIG_PATH.write_text(json.dumps({'AdminIDs': ['1'], 'Hosts': old_hosts}))
+        check_settings_file()
+        migrated = json.loads(CONFIG_PATH.read_text())
+        assert 'Hosts' not in migrated and migrated['SecondaryHosts'] == old_hosts and migrated['AdminIDs'] == ['1'], migrated
+        assert migrated['LocalName'] == 'primary-node'
     print("ok")
