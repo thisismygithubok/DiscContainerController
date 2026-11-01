@@ -36,6 +36,10 @@ async def list_containers():
         raise RuntimeError(err.strip())
     return parse_ps(out, SELF_ID)
 
+def describe(e):
+    """Error text for logs. Never repr(): aiohttp response errors' repr includes the request headers, i.e. the agent token."""
+    return f'{type(e).__name__}: {e}'
+
 async def agent_request(host, method, path):
     """Call a remote agent ({"url", "token"} from settings SecondaryHosts). Returns (HTTP status, JSON body)."""
     headers = {'Authorization': f'Bearer {host["token"]}'}
@@ -58,7 +62,7 @@ async def resolve_hosts(hosts, local):
     named = {}
     for host, name in zip(hosts, names):
         if isinstance(name, BaseException):
-            logger.warning(f'Agent {host["url"]} unavailable, skipping its containers: {name!r}')
+            logger.warning(f'Agent {host["url"]} unavailable, skipping its containers: {describe(name)}')
         elif not isinstance(name, str) or not name or '/' in name or name == local or name in named:
             logger.error(f'Agent {host["url"]} has an invalid or duplicate name {name!r}; set a unique "name" for it in SecondaryHosts')
         else:
@@ -77,7 +81,7 @@ async def list_all(hosts):
     results = await asyncio.gather(*(list_remote(n, h) for n, h in hosts.items()), return_exceptions=True)
     for host_name, result in zip(hosts, results):
         if isinstance(result, BaseException):
-            logger.warning(f'Agent {host_name} unavailable, skipping its containers: {result!r}')
+            logger.warning(f'Agent {host_name} unavailable, skipping its containers: {describe(result)}')
         else:
             containers.extend(result)
     return containers
@@ -92,7 +96,7 @@ async def control(name, action, hosts):
     try:
         status, data = await agent_request(hosts[host_name], 'POST', f'/containers/{container}/{action}')
     except (aiohttp.ClientError, asyncio.TimeoutError, KeyError) as e:
-        return 1, repr(e)
+        return 1, describe(e)
     return (0, '') if status == 200 else (1, f'HTTP {status}: {data}')
 
 def container_host(name, local):
@@ -125,4 +129,10 @@ if __name__ == "__main__":
              {'url': 'c', 'token': 't', 'reported': 'nas'}, {'url': 'd', 'token': 't', 'reported': None},
              {'url': 'e', 'token': 't', 'reported': 'primary-node'}, {'url': 'f', 'token': 't', 'reported': 'x/y'}]
     assert asyncio.run(resolve_hosts(hosts, 'primary-node')) == {'pi': hosts[0], 'nas': hosts[1]}
+
+    from aiohttp.client_reqrep import RequestInfo
+    from multidict import CIMultiDict, CIMultiDictProxy
+    from yarl import URL
+    info = RequestInfo(URL('http://x'), 'GET', CIMultiDictProxy(CIMultiDict({'Authorization': 'Bearer SECRET'})), URL('http://x'))
+    assert 'SECRET' not in describe(aiohttp.ContentTypeError(info, (), status=502, message='not json'))
     print("ok")

@@ -99,7 +99,7 @@ A settings.json file will be generated in your mounted config folder. It is re-r
     "SecondaryHosts": [
         {
             "url": "http://100.64.0.2:8080",
-            "token": "<the agent's AGENT_TOKEN>"
+            "token_env": "SERVER2_AGENT_TOKEN"
         }
     ]
 }
@@ -123,23 +123,31 @@ services:
     ports:
       - "100.64.0.2:8080:8080"     # bind to a private (VPN) address, not 0.0.0.0
 ```
-- AGENT_TOKEN (required) - shared secret; put the same value in the master's settings.json `SecondaryHosts` entry.
+- AGENT_TOKEN (required) - shared secret; the master needs the same value (see setup step 3).
 - AGENT_PORT (optional, default 8080) - port the agent listens on inside the container.
 - TZ (optional) - set it to the same value as the master so both logs use the same time.
 
 Setup:
 1. Generate a token: `openssl rand -hex 32`
 2. Start the agent on the remote server with that token (compose above).
-3. Add the host to the master's settings.json (no restart needed). `name` is optional; without it the host is named after the remote server's hostname:
+3. Give the master the token as an environment variable (recommended, so it isn't stored in settings.json), e.g. in the master's compose file and `.env`:
+```
+environment:
+    SERVER2_AGENT_TOKEN: ${SERVER2_AGENT_TOKEN}
+```
+   Then add the host to the master's settings.json. Settings changes apply without a restart, but a new environment variable needs `docker compose up -d`. `name` is optional; without it the host is named after the remote server's hostname:
 ```
 "SecondaryHosts": [
     {
         "url": "http://100.64.0.2:8080",
-        "token": "<the agent's AGENT_TOKEN>",
+        "token_env": "SERVER2_AGENT_TOKEN",
         "name": "server2"
     }
 ]
 ```
+   `"token": "<the agent's AGENT_TOKEN>"` in place of `token_env` also works, but then the token is stored in plain text in settings.json.
+
+   The token is never logged or shown in Discord. Anyone with Docker access on the master's host can still read it (`docker inspect` shows environment variables), as can anyone who can read the `.env` file, so keep `.env` private (`chmod 600 .env`).
 4. Run `/list-containers` - the remote containers appear as `server2/<container name>`.
 
 Host names must be unique, can't contain `/`, and can't be the same as `LocalName`; a host whose name breaks these rules is skipped and an error is logged. Upgrading from v1.0.7: rename `"Hosts"` to `"SecondaryHosts"` in settings.json. The v1.0.7 object form `{"server2": {"url": ..., "token": ...}}` still works (the key is the name).

@@ -1,3 +1,4 @@
+import os
 import json
 import logging
 from pathlib import Path
@@ -44,14 +45,23 @@ def local_name(settings):
     return name
 
 def remote_hosts(settings):
-    """Remote agents as [{"url", "token", optional "name"}]. The v1.0.7 form {"<name>": {...}} is still accepted."""
+    """Remote agents as [{"url", "token", optional "name"}]. The v1.0.7 form {"<name>": {...}} is still accepted.
+    An entry can give "token_env" (an env var name) instead of "token", keeping the token out of settings.json."""
     hosts = settings.get('SecondaryHosts', [])
     if isinstance(hosts, dict):
         hosts = [{**h, 'name': name} if isinstance(h, dict) else h for name, h in hosts.items()]
     if not isinstance(hosts, list) or not all(
-            isinstance(h, dict) and 'url' in h and 'token' in h and '/' not in str(h.get('name', '')) for h in hosts):
-        raise ValueError('SecondaryHosts in settings.json must be a list of {"url": "...", "token": "...", "name": "<optional, no />"}')
-    return hosts
+            isinstance(h, dict) and 'url' in h and ('token' in h or 'token_env' in h) and '/' not in str(h.get('name', '')) for h in hosts):
+        raise ValueError('SecondaryHosts in settings.json must be a list of {"url": "...", "token_env": "<env var>" or "token": "...", "name": "<optional, no />"}')
+    resolved = []
+    for h in hosts:
+        if 'token_env' in h:
+            if not os.environ.get(h['token_env']):
+                # Names the variable only; the token itself is never logged or shown
+                raise ValueError(f'SecondaryHosts entry {h["url"]}: environment variable {h["token_env"]} is not set in the bot container')
+            h = {**h, 'token': os.environ[h['token_env']]}
+        resolved.append(h)
+    return resolved
 
 def check_settings_file():
     config_path = CONFIG_PATH
@@ -103,7 +113,10 @@ if __name__ == "__main__":
     assert remote_hosts({'SecondaryHosts': {'a': {'url': 'u', 'token': 't'}}}) == [{'url': 'u', 'token': 't', 'name': 'a'}]
     assert remote_hosts({'SecondaryHosts': [{'url': 'u', 'token': 't'}]}) == [{'url': 'u', 'token': 't'}]
     assert local_name({}) == 'primary-node' and local_name({'LocalName': 'server-pc'}) == 'server-pc'
-    for bad in ({'a': {'url': 'u'}}, [{'url': 'u', 'token': 't', 'name': 'a/b'}], 'x'):
+    os.environ['DCC_TEST_TOKEN'] = 'from-env'
+    assert remote_hosts({'SecondaryHosts': [{'url': 'u', 'token_env': 'DCC_TEST_TOKEN'}]})[0]['token'] == 'from-env'
+    os.environ.pop('DCC_UNSET_TOKEN', None)
+    for bad in ({'a': {'url': 'u'}}, [{'url': 'u', 'token': 't', 'name': 'a/b'}], 'x', [{'url': 'u', 'token_env': 'DCC_UNSET_TOKEN'}]):
         try:
             remote_hosts({'SecondaryHosts': bad})
             raise AssertionError(f'bad SecondaryHosts accepted: {bad}')
