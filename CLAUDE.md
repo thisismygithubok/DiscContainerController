@@ -27,8 +27,8 @@ docker run --rm -e DISCORD_BOT_TOKEN=... -e DISCORD_GUILD_ID=... \
 # Check startup without connecting to a live session: a dummy token fails at login
 docker run --rm -e DISCORD_BOT_TOKEN=invalid -e DISCORD_GUILD_ID=1 dcc-test
 
-# Publish (always multi-arch; prod host is amd64, dev machine may be arm64)
-docker buildx build --builder multi-builder --platform linux/amd64,linux/arm64 \
+# Publish (always multi-arch; prod host is amd64, dev machine may be arm64, an agent runs on armv7)
+docker buildx build --builder multi-builder --platform linux/amd64,linux/arm64,linux/arm/v7 \
   -t thisismynameok/disc-container-controller:latest --push .
 
 # Vulnerability scan
