@@ -47,7 +47,7 @@ def container_dir(container):
     # The name check already rules out "/" and "..": also check the resolved path (and symlinks), as code scanners expect
     base = os.path.realpath(SETTINGS_DIR)
     path = os.path.realpath(os.path.join(base, container))
-    if os.path.dirname(path) != base:
+    if not path.startswith(base + os.sep):
         raise ValueError(f'invalid container name {container!r}')
     return Path(path)
 
