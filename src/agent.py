@@ -26,7 +26,16 @@ async def auth(request, handler):
     if not hmac.compare_digest(request.headers.get('Authorization', '').encode(), f'Bearer {AGENT_TOKEN}'.encode()):
         logger.warning(f'Rejected unauthorized {request.method} {request.path} from {request.remote}')
         return web.json_response({'error': 'unauthorized'}, status=401)
-    return await handler(request)
+    # Log every refused request (unknown or unlabeled containers, values outside the label, bad bodies, unknown paths)
+    try:
+        resp = await handler(request)
+    except web.HTTPException as e:
+        resp = e
+    if 400 <= resp.status < 500:
+        logger.warning(f'Rejected {request.method} {request.path} from {request.remote}: HTTP {resp.status} {resp.text}')
+    if isinstance(resp, web.HTTPException):
+        raise resp
+    return resp
 
 async def get_containers(request):
     try:
@@ -98,8 +107,7 @@ async def post_settings(request):
     # Checked against this host's own label: the master's request is never trusted for what is editable
     code, err = await container_settings.apply(name, values, spec)
     if code != 0:
-        logger.error(f'{name} settings failed: {err}')
-        return web.json_response({'error': err}, status=400)
+        return web.json_response({'error': err}, status=400)  # logged by the auth middleware
     logger.info(f'{name} restarted with new settings')
     return web.json_response({'ok': True})
 
