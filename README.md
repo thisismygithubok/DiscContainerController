@@ -16,7 +16,7 @@ This bot has several slash commands to use. You only see the containers your [se
 - /control-container - this is an interactive command:
     - First: If you can see containers on more than one host, you choose the host (shown with how many containers you can see on it). Otherwise this step is skipped.
     - Then: You choose a container (24 per page, with Previous/Next buttons if there are more)
-    - Second: You choose an action of start, stop, or restart
+    - Second: You choose an action of start, stop, or restart (the menu also shows the container's state and image). If [settings editing](#settings-editing-optional) is on, you may also see Settings
     - Stop asks you to confirm first
     - Third: The bot posts a message mentioning you once the action has completed, or if it failed
 
@@ -90,6 +90,8 @@ A settings.json file will be generated in your mounted config folder. It is re-r
 - Sections - a reference list of the sections you've defined via container labels. It is informational only; access is controlled by AdminIDs and AllowedRoles.
 - LocalName - the name of the bot's own host, shown in the host menu and used in `"<host>/..."` permissions. Defaults to `"primary-node"`.
 - SecondaryHosts - remote agents on other servers (see [Remote Hosts](#remote-hosts)). Leave it as `[]` to only control the local host.
+- EnableSettingsEditing - `true` turns on [settings editing](#settings-editing-optional). Defaults to `false`.
+- EditRoles - like AllowedRoles, but for who may change containers' settings (same entry formats). Admins always may. Users also need AllowedRoles access to reach the container.
 - Example:
 ```
 {
@@ -140,6 +142,7 @@ services:
 ```
 - AGENT_TOKEN (required) - shared secret; the master needs the same value (see setup step 3).
 - AGENT_PORT (optional, default 8080) - port the agent listens on inside the container.
+- AGENT_ENABLE_EDIT (optional, default off) - `true` allows [settings editing](#settings-editing-optional) on this host. Needs a config folder mounted at `/config`.
 - TZ (optional) - set it to the same value as the master so both logs use the same time.
 
 Setup:
@@ -168,6 +171,42 @@ environment:
 Host names must be unique, can't contain `/`, and can't be the same as `LocalName`. A host entry that breaks these rules, is missing `url`/`token_env`, or whose `token_env` variable isn't set, is skipped and an error is logged; the other hosts keep working. Upgrading from v1.0.7: `"Hosts": {"server2": {...}}` is now a list called `SecondaryHosts`, so `"SecondaryHosts": [{"name": "server2", ...}]`. The bot logs a warning at startup while settings.json still has `"Hosts"`.
 
 The agent can only list, start, stop and restart containers on its host, and it never lists or controls itself. Everyone with the token has that power, and the token is sent in plain HTTP. **Only expose the agent on a private network (Tailscale, WireGuard, LAN) or behind a TLS reverse proxy (then use an `https://` url) - never directly on the internet.**
+
+## Settings Editing (optional) ##
+Lets users change chosen environment variables of a container from Discord, e.g. the map or game mode of a game server: `/control-container` -> container -> **Settings** -> pick values -> **Apply & restart**. Users only pick from values you list; they never type anything, and they never see other environment variables.
+
+It needs no extra Docker access (it works with the [socket proxy](#docker-socket-proxy-optional)) and doesn't touch your compose files or `.env`. The bot saves the picked values in its config folder, and a small script that ships with the bot, `dcc-env.sh`, exports them each time the container starts, overriding the values from compose. Applying = save + restart.
+
+1. Turn it on: `"EnableSettingsEditing": true` in settings.json, and give roles access in `EditRoles` (e.g. `{"<role id>": ["Game Servers"]}`).
+2. Label the container with what may be edited, `VAR=value1,value2,...` separated by `;`:
+```
+labels:
+    section: "Game Servers"
+    dcc.edit: "MAPS=zm_genesis,zm_zod;GAME_MODE=zclassic,zstandard"
+```
+3. Restart the bot. It creates `container-settings/<container name>/` in its config folder, with `dcc-env.sh` inside. (It does this at every start for containers with a `dcc.edit` label.)
+4. Change the container to start through `dcc-env.sh`: mount that folder at `/dcc`, and put `/dcc/dcc-env.sh` in front of the image's own entrypoint. Find the image's entrypoint and command with `docker image inspect <image> --format '{{json .Config.Entrypoint}} {{json .Config.Cmd}}'`. Set **both** `entrypoint:` and `command:`: setting `entrypoint:` makes Docker drop the image's default command.
+```
+services:
+  bo3:
+    image: thisismynameok/bo3-server-docker:latest
+    container_name: bo3-server
+    entrypoint: ["/dcc/dcc-env.sh", "entrypoint.sh"]   # dcc-env.sh, then the image's entrypoint
+    command: ["boiii"]                                 # the image's command
+    volumes:
+      - ./DCC/config/container-settings/bo3-server:/dcc:ro   # the bot's config folder + container-settings/<container name>
+    labels:
+      section: "Game Servers"
+      dcc.edit: "MAPS=zm_genesis,zm_zod;GAME_MODE=zclassic,zstandard"
+```
+Then `docker compose up -d` it once. Until a value is picked in Discord, the container uses its compose values as before.
+
+Notes:
+- The image needs `/bin/sh` (nearly all do; minimal "distroless" images don't, and can't use this). The app must read the variables at startup, which is what environment variables are for.
+- Up to 4 variables per container, up to 25 values each, each value at most 100 characters and without `,` or `;`. One value (`VAR=value`) means that's the only choice.
+- Applying restarts the container, so anyone connected to it is disconnected. Every change is logged with the Discord user, like other actions.
+- If the folder from step 3 was created by Docker first (e.g. you did step 4 before starting the bot), it belongs to root and the bot can't write to it. The bot logs the fix: `sudo chown -R 1000 <folder>`.
+- Containers on a [remote host](#remote-hosts): set `AGENT_ENABLE_EDIT=true` on that agent and give it a config folder (`-v ./config:/config`, owned by uid 1000); the folder in step 4 is then in the agent's config folder. Without `AGENT_ENABLE_EDIT`, the agent refuses edits and its containers show no Settings.
 
 ## Docker Socket Proxy (optional) ##
 Mounting `docker.sock` gives a container full control of Docker, which is the same as root on the host. Instead, you can run a socket proxy that only lets through the few Docker API calls this bot uses. If the bot or agent were ever compromised, it could then only list, start, stop and restart containers, not create containers, exec into them, or read their settings (e.g. other services' passwords in environment variables).
@@ -205,6 +244,7 @@ networks:
 ```
 - For an agent, use `-allowfrom=DiscContainerController-Agent`. The agent's own port stays on the default network as before.
 - Blocked calls are logged by the proxy (`docker logs dcc-socket-proxy`) and show up in the bot as a failed action.
+- [Settings editing](#settings-editing-optional) works through the proxy too: it only uses restart.
 - The proxy does not know about Discord permissions: the bot can still start, stop or restart any container on that host (permissions are enforced by the bot). The proxy itself still has full access to Docker, so never publish its port.
 
 ## Logging ##

@@ -11,8 +11,13 @@ AGENT_TIMEOUT = aiohttp.ClientTimeout(total=15)
 # shortcut: Docker sets HOSTNAME to the 12-char container ID; a custom `hostname:` in compose makes the bot list itself again.
 SELF_ID = os.environ.get('HOSTNAME', '')
 
+# The only docker commands ever run: keeps the bot within what the socket proxy in the README allows.
+DOCKER_COMMANDS = {'ps', 'info', 'start', 'stop', 'restart'}
+
 async def docker(*args):
     """Run a docker CLI command without blocking the event loop. Returns (returncode, stdout, stderr)."""
+    if args[0] not in DOCKER_COMMANDS:
+        raise ValueError(f'docker {args[0]} is not allowed')
     proc = await asyncio.create_subprocess_exec(
         'docker', *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
@@ -20,18 +25,18 @@ async def docker(*args):
     return proc.returncode, out.decode(), err.decode()
 
 def parse_ps(output, self_id=''):
-    """Parse `docker ps` lines of ID, name, state and section, leaving out the bot's own container."""
+    """Parse `docker ps` lines of ID, name, state, image, dcc.edit label and section, leaving out the bot's own container."""
     containers = []
     for line in output.splitlines():
         if line:
-            container_id, name, state, section = line.split('\t', 3)
+            container_id, name, state, image, edit, section = line.split('\t', 5)
             if container_id != self_id:
-                containers.append((name, state, section or 'Uncategorized'))
+                containers.append((name, state, section or 'Uncategorized', image, edit))
     return containers
 
 async def list_containers():
-    """All containers except the bot itself as [(name, state, section)]. Raises RuntimeError if docker fails."""
-    code, out, err = await docker('ps', '-a', '--format', '{{.ID}}\t{{.Names}}\t{{.State}}\t{{.Label "section"}}')
+    """All containers except the bot itself as [(name, state, section, image, dcc.edit label)]. Raises RuntimeError if docker fails."""
+    code, out, err = await docker('ps', '-a', '--format', '{{.ID}}\t{{.Names}}\t{{.State}}\t{{.Image}}\t{{.Label "dcc.edit"}}\t{{.Label "section"}}')
     if code != 0:
         raise RuntimeError(err.strip())
     return parse_ps(out, SELF_ID)
@@ -40,11 +45,11 @@ def describe(e):
     """Error text for logs. Never repr(): aiohttp response errors' repr includes the request headers, i.e. the agent token."""
     return f'{type(e).__name__}: {e}'
 
-async def agent_request(host, method, path):
+async def agent_request(host, method, path, body=None):
     """Call a remote agent ({"url", "token"} from settings SecondaryHosts). Returns (HTTP status, JSON body)."""
     headers = {'Authorization': f'Bearer {host["token"]}'}
     async with aiohttp.ClientSession(timeout=AGENT_TIMEOUT, headers=headers) as session:
-        async with session.request(method, host['url'].rstrip('/') + path) as resp:
+        async with session.request(method, host['url'].rstrip('/') + path, json=body) as resp:
             return resp.status, await resp.json()
 
 async def host_name(host):
@@ -73,7 +78,11 @@ async def list_remote(host_name, host):
     status, data = await agent_request(host, 'GET', '/containers')
     if status != 200:
         raise RuntimeError(f'HTTP {status}: {data}')
-    return [(f'{host_name}/{name}', state, section) for name, state, section in data]
+    containers = []
+    for name, state, section, *extra in data:
+        image, edit = (extra + ['', ''])[:2]  # v1.0.8 agents send only name, state and section: no image, no editing
+        containers.append((f'{host_name}/{name}', state, section, image, edit))
+    return containers
 
 async def list_all(hosts):
     """Local containers plus each agent's as "<host>/<container>". Unreachable agents are logged and skipped."""
@@ -99,6 +108,26 @@ async def control(name, action, hosts):
         return 1, describe(e)
     return (0, '') if status == 200 else (1, f'HTTP {status}: {data}')
 
+async def get_settings(name, hosts):
+    """Current values of an agent container's editable settings. Raises RuntimeError if the agent can't say."""
+    host_name, _, container = name.rpartition('/')
+    try:
+        status, data = await agent_request(hosts[host_name], 'GET', f'/containers/{container}/settings')
+    except (aiohttp.ClientError, asyncio.TimeoutError, KeyError) as e:
+        raise RuntimeError(describe(e)) from e
+    if status != 200:
+        raise RuntimeError(f'HTTP {status}: {data}')
+    return data['values']
+
+async def apply_settings(name, values, hosts):
+    """Ask an agent to apply settings to one of its containers; it checks them against its own label. Returns (returncode, error)."""
+    host_name, _, container = name.rpartition('/')
+    try:
+        status, data = await agent_request(hosts[host_name], 'POST', f'/containers/{container}/settings', {'values': values})
+    except (aiohttp.ClientError, asyncio.TimeoutError, KeyError) as e:
+        return 1, describe(e)
+    return (0, '') if status == 200 else (1, f'HTTP {status}: {data}')
+
 def container_host(name, local):
     return name.rpartition('/')[0] or local
 
@@ -111,12 +140,17 @@ def permitted(containers, allowed, local):
 
 if __name__ == "__main__":
     local = 'main'  # any name works; deliberately not the default, so these checks can't depend on it
-    parsed = parse_ps("aaa\tweb\trunning\tGame Servers\nbbb\tdb\texited\t\nccc\tbot\trunning\tBackend\n\n", 'ccc')
-    assert parsed == [('web', 'running', 'Game Servers'), ('db', 'exited', 'Uncategorized')], parsed
+    parsed = parse_ps("aaa\tweb\trunning\tnginx:1\tMODE=a,b\tGame Servers\nbbb\tdb\texited\tpg\t\t\nccc\tbot\trunning\tdcc\t\tBackend\n\n", 'ccc')
+    assert parsed == [('web', 'running', 'Game Servers', 'nginx:1', 'MODE=a,b'), ('db', 'exited', 'Uncategorized', 'pg', '')], parsed
+    try:
+        asyncio.run(docker('run', '--privileged', 'x'))
+        raise AssertionError('docker run was allowed')
+    except ValueError:
+        pass
     assert permitted(parsed, None, local) == parsed
     assert permitted(parsed, {'Game Servers'}, local) == [parsed[0]]
     assert permitted(parsed, set(), local) == []
-    mixed = parsed + [('pi/hawser', 'running', 'Uncategorized'), ('pi/games', 'running', 'Game Servers')]
+    mixed = parsed + [('pi/hawser', 'running', 'Uncategorized', '', ''), ('pi/games', 'running', 'Game Servers', '', '')]
     assert permitted(mixed, {'Game Servers'}, local) == [mixed[0], mixed[3]]
     assert permitted(mixed, {'pi/*'}, local) == mixed[2:]
     assert permitted(mixed, {'pi/Game Servers'}, local) == [mixed[3]]

@@ -22,7 +22,7 @@ COPY src/ .
 COPY src/entrypoint.sh /entrypoint.sh
 
 # Fail the build if a self-check fails
-RUN PYTHONDONTWRITEBYTECODE=1 sh -c 'python3 scripts/containers.py && python3 scripts/settings.py && DISCORD_GUILD_ID=1 PYTHONPATH=. python3 cogs/list-containers.py'
+RUN PYTHONDONTWRITEBYTECODE=1 sh -c 'python3 scripts/containers.py && python3 scripts/settings.py && PYTHONPATH=. python3 scripts/container_settings.py && DISCORD_GUILD_ID=1 PYTHONPATH=. python3 cogs/list-containers.py'
 
 # Non-Root Docker
 RUN addgroup -S -g 988 docker && \
