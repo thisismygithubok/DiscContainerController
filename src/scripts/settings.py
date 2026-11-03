@@ -10,7 +10,9 @@ DEFAULT_SETTINGS = {
     "AllowedRoles": {},
     "Sections": [],
     "LocalName": "primary-node",
-    "SecondaryHosts": []
+    "SecondaryHosts": [],
+    "EnableSettingsEditing": False,
+    "EditRoles": {}
 }
 
 CONFIG_PATH = Path("/config/settings.json")
@@ -24,14 +26,14 @@ def load_settings():
         logger.error(f'Error loading settings: {e}')
         return None
 
-def allowed_sections(settings, user):
-    """Sections the user may see/control, or None if the user is an admin (all sections)."""
+def allowed_sections(settings, user, key='AllowedRoles'):
+    """Sections the user may see/control (key='EditRoles': edit settings of), or None if the user is an admin (all sections)."""
     # map(str): IDs may be written as JSON numbers or strings
     if str(user.id) in map(str, settings.get('AdminIDs', [])):
         return None
-    roles = settings.get('AllowedRoles', {})
+    roles = settings.get(key, {})
     if not isinstance(roles, dict):
-        raise ValueError('AllowedRoles in settings.json must be an object of {"<role id>": [sections]}')
+        raise ValueError(f'{key} in settings.json must be an object of {{"<role id>": [sections]}}')
     allowed = set()
     for role in user.roles:
         allowed.update(roles.get(str(role.id), []))
@@ -109,6 +111,8 @@ if __name__ == "__main__":
     assert allowed_sections({'AdminIDs': [42]}, user) is None
     assert allowed_sections({'AdminIDs': ['42']}, user) is None
     assert allowed_sections({'AllowedRoles': {'7': ['Games']}}, user) == {'Games'}
+    assert allowed_sections({'AllowedRoles': {'7': ['Games']}, 'EditRoles': {'7': ['pi/*']}}, user, 'EditRoles') == {'pi/*'}
+    assert allowed_sections({'AllowedRoles': {'7': ['Games']}}, user, 'EditRoles') == set()
     try:
         allowed_sections({'AllowedRoles': []}, user)
         raise AssertionError('list AllowedRoles accepted')

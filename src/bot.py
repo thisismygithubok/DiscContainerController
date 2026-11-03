@@ -2,6 +2,7 @@ import os
 import discord
 import logging
 import scripts.settings as settings
+from scripts import container_settings
 from discord import app_commands
 from discord.ext import commands
 
@@ -40,6 +41,9 @@ async def setup_hook():
     logger.info('Loading settings...')
     settings.check_settings_file()
     logger.info('Settings loaded successfully')
+    if (settings.load_settings() or {}).get('EnableSettingsEditing') is True:
+        # Containers whose entrypoint runs dcc-env.sh can't start until their settings folder exists
+        await container_settings.prepare_labeled()
 
     await load_cogs()
     logger.info("Cogs loaded successfully")

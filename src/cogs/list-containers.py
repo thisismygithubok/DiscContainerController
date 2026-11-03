@@ -66,7 +66,7 @@ class ListContainers(commands.Cog):
             sections = {}
             local = local_name(settings)
             hosts = await resolve_hosts(remote_hosts(settings), local)
-            for container, status, section in permitted(await list_all(hosts), allowed, local):
+            for container, status, section, *_ in permitted(await list_all(hosts), allowed, local):
                 sections.setdefault(section, []).append((container, status.capitalize()))
 
             logger.debug(f'Container status: {sections}')
