@@ -41,9 +41,15 @@ def invalid(values, spec):
     return None
 
 def container_dir(container):
+    """The container's folder in SETTINGS_DIR. `container` can come from an agent request, so it must stay inside."""
     if not NAME.fullmatch(container):
         raise ValueError(f'invalid container name {container!r}')
-    return SETTINGS_DIR / container
+    # The name check already rules out "/" and "..": also check the resolved path (and symlinks), as code scanners expect
+    base = os.path.realpath(SETTINGS_DIR)
+    path = os.path.realpath(os.path.join(base, container))
+    if os.path.dirname(path) != base:
+        raise ValueError(f'invalid container name {container!r}')
+    return Path(path)
 
 def prepare(container):
     """Create the container's settings folder with an up-to-date dcc-env.sh, which its entrypoint needs to start."""
@@ -125,7 +131,8 @@ if __name__ == "__main__":
         assert asyncio.run(apply('bo3', {'MAPS': 'nope'}, spec))[0] == 1 and len(restarted) == 2, 'invalid value: no restart'
         assert asyncio.run(apply('bo3', {'MAPS': 'zm_genesis'}, {'MAPS': spec['MAPS']})) == (0, '')
         assert read_values('bo3') == {'MAPS': 'zm_genesis'}, 'variables dropped from the label are removed'
-        for bad in ('../x', '', '-rf'):
+        (Path(tmp) / 'link').symlink_to('/etc')  # a symlinked folder must not lead outside either
+        for bad in ('../x', '', '-rf', '..', 'a/b', 'link'):
             try:
                 container_dir(bad)
                 raise AssertionError(f'bad container name accepted: {bad!r}')
