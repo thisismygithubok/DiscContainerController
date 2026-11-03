@@ -56,6 +56,7 @@ You can find an example in [docker-compose-example.yml](https://github.com/thisi
     - TZ
         - This is optional, but you can specify this for the container/logging output timezone
         - Must use IANA standard timezones
+    - DCC_* - set any setting from the environment instead of settings.json, see [Settings from Environment Variables](#settings-from-environment-variables)
 
 ```
 environment:
@@ -121,6 +122,26 @@ A settings.json file will be generated in your mounted config folder. It is re-r
         }
     ]
 }
+```
+### Settings from Environment Variables ###
+Every setting can also be given as an environment variable on the bot container. A variable that is set overrides that key in settings.json; keys without a variable still come from the file. Unlike settings.json, environment variables only change when the container is recreated (`docker compose up -d`).
+
+| Variable | Setting | Format |
+|---|---|---|
+| `DCC_ADMIN_IDS` | AdminIDs | comma-separated, e.g. `1234567890101010,2222222222222222` |
+| `DCC_ALLOWED_ROLES` | AllowedRoles | JSON, e.g. `{"0101010987654321": ["Game Servers"]}` |
+| `DCC_SECTIONS` | Sections | comma-separated, e.g. `Backend,Frontend,Game Servers` |
+| `DCC_LOCAL_NAME` | LocalName | text |
+| `DCC_SECONDARY_HOSTS` | SecondaryHosts | JSON, e.g. `[{"url": "http://100.64.0.2:8080", "token_env": "SERVER2_AGENT_TOKEN"}]` |
+| `DCC_ENABLE_SETTINGS_EDITING` | EnableSettingsEditing | `true` or `false` |
+| `DCC_EDIT_ROLES` | EditRoles | JSON, same as `DCC_ALLOWED_ROLES` |
+
+If a JSON variable is invalid, commands fail and the error names the variable. In compose, quote JSON values with single quotes:
+```
+environment:
+    DCC_ADMIN_IDS: "1234567890101010"
+    DCC_ALLOWED_ROLES: '{"0101010987654321": ["Game Servers"], "1111111111111111": ["pikvm/*"]}'
+    DCC_LOCAL_NAME: primary-node
 ```
 
 ## Remote Hosts ##

@@ -17,11 +17,37 @@ DEFAULT_SETTINGS = {
 
 CONFIG_PATH = Path("/config/settings.json")
 
+# Env var per setting; a set variable overrides that key from settings.json.
+# Lists of IDs/names are comma-separated, objects and SecondaryHosts are JSON.
+def _csv(v):
+    return [x.strip() for x in v.split(',') if x.strip()]
+
+ENV_SETTINGS = {
+    'DCC_ADMIN_IDS': ('AdminIDs', _csv),
+    'DCC_ALLOWED_ROLES': ('AllowedRoles', json.loads),
+    'DCC_SECTIONS': ('Sections', _csv),
+    'DCC_LOCAL_NAME': ('LocalName', str),
+    'DCC_SECONDARY_HOSTS': ('SecondaryHosts', json.loads),
+    'DCC_ENABLE_SETTINGS_EDITING': ('EnableSettingsEditing', lambda v: v.strip().lower() == 'true'),
+    'DCC_EDIT_ROLES': ('EditRoles', json.loads),
+}
+
+def env_overrides():
+    overrides = {}
+    for var, (key, parse) in ENV_SETTINGS.items():
+        if var in os.environ:
+            try:
+                overrides[key] = parse(os.environ[var])
+            except ValueError as e:
+                # Names the variable only: DCC_SECONDARY_HOSTS may hold a token
+                raise ValueError(f'{var} is not valid JSON ({type(e).__name__})') from None
+    return overrides
+
 def load_settings():
-    """Read settings.json fresh so edits apply without a restart. Returns None on error."""
+    """Read settings.json fresh so edits apply without a restart, with DCC_* env vars on top. Returns None on error."""
     try:
         with open(CONFIG_PATH, 'r') as f:
-            return json.load(f)
+            return {**json.load(f), **env_overrides()}
     except Exception as e:
         logger.error(f'Error loading settings: {e}')
         return None
@@ -133,4 +159,21 @@ if __name__ == "__main__":
             raise AssertionError(f'non-list SecondaryHosts accepted: {bad}')
         except ValueError:
             pass
+    for var in ENV_SETTINGS:
+        os.environ.pop(var, None)
+    assert env_overrides() == {}
+    os.environ.update(DCC_ADMIN_IDS='1, 2', DCC_ENABLE_SETTINGS_EDITING='True', DCC_LOCAL_NAME='server-pc',
+                      DCC_ALLOWED_ROLES='{"7": ["Games"]}', DCC_SECONDARY_HOSTS='[{"url": "u", "token_env": "DCC_TEST_TOKEN"}]')
+    o = env_overrides()
+    assert o == {'AdminIDs': ['1', '2'], 'EnableSettingsEditing': True, 'LocalName': 'server-pc',
+                 'AllowedRoles': {'7': ['Games']}, 'SecondaryHosts': [{'url': 'u', 'token_env': 'DCC_TEST_TOKEN'}]}, o
+    assert allowed_sections(o, user) == {'Games'} and remote_hosts(o)[0]['token'] == 'from-env'
+    os.environ['DCC_EDIT_ROLES'] = '{"7": ["pi/*"'
+    try:
+        env_overrides()
+        raise AssertionError('invalid JSON accepted')
+    except ValueError as e:
+        assert 'DCC_EDIT_ROLES' in str(e) and 'pi/*' not in str(e)
+    for var in ENV_SETTINGS:
+        os.environ.pop(var, None)
     print("ok")
