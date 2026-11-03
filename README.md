@@ -39,6 +39,7 @@ docker run -d --name DiscContainerController-Agent --restart always --pull alway
   -p <private ip>:8080:8080 \
   thisismynameok/disc-container-controller:latest python3 agent.py
 ```
+For [settings editing](#settings-editing-optional) on that server, also add `-e AGENT_ENABLE_EDIT=true -v ./config:/config`.
 
 ## Docker Compose ##
 You can find an example in [docker-compose-example.yml](https://github.com/thisismygithubok/DiscContainerController/blob/main/docker-compose-example.yml)
@@ -135,8 +136,10 @@ services:
     environment:
       AGENT_TOKEN: ${AGENT_TOKEN}   # at least 32 characters, e.g. `openssl rand -hex 32`
       TZ: ${TZ}
+      # AGENT_ENABLE_EDIT: "true"   # only for settings editing, with the /config mount below
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      # - ./config:/config          # only for settings editing; owned by uid 1000
     ports:
       - "100.64.0.2:8080:8080"     # bind to a private (VPN) address, not 0.0.0.0
 ```
@@ -170,6 +173,8 @@ environment:
 
 Host names must be unique, can't contain `/`, and can't be the same as `LocalName`. A host entry that breaks these rules, is missing `url`/`token_env`, or whose `token_env` variable isn't set, is skipped and an error is logged; the other hosts keep working. Upgrading from v1.0.7: `"Hosts": {"server2": {...}}` is now a list called `SecondaryHosts`, so `"SecondaryHosts": [{"name": "server2", ...}]`. The bot logs a warning at startup while settings.json still has `"Hosts"`.
 
+When upgrading, update the bot before (or together with) its agents. A newer bot works with older agents, but a bot older than v1.0.9 can't read v1.0.9+ agents and skips them as unavailable.
+
 The agent can only list, start, stop and restart containers on its host, and it never lists or controls itself. Everyone with the token has that power, and the token is sent in plain HTTP. **Only expose the agent on a private network (Tailscale, WireGuard, LAN) or behind a TLS reverse proxy (then use an `https://` url) - never directly on the internet.**
 
 ## Settings Editing (optional) ##
@@ -185,7 +190,7 @@ labels:
     dcc.edit: "MAPS=zm_genesis,zm_zod;GAME_MODE=zclassic,zstandard"
 ```
 3. Restart the bot. It creates `container-settings/<container name>/` in its config folder, with `dcc-env.sh` inside. (It does this at every start for containers with a `dcc.edit` label.)
-4. Change the container to start through `dcc-env.sh`: mount that folder at `/dcc`, and put `/dcc/dcc-env.sh` in front of the image's own entrypoint. Find the image's entrypoint and command with `docker image inspect <image> --format '{{json .Config.Entrypoint}} {{json .Config.Cmd}}'`. Set **both** `entrypoint:` and `command:`: setting `entrypoint:` makes Docker drop the image's default command.
+4. Change the container to start through `dcc-env.sh`: mount that folder at `/dcc`, and put `/dcc/dcc-env.sh` in front of the image's own entrypoint. Find the image's entrypoint and command with `docker image inspect <image> --format '{{json .Config.Entrypoint}} {{json .Config.Cmd}}'`. Set **both** `entrypoint:` and `command:`: setting `entrypoint:` makes Docker drop the image's default command. If the command is `null`, leave `command:` out.
 ```
 services:
   bo3:
@@ -255,11 +260,12 @@ plex successfully restarted
 ```
 Failed actions, cancelled stops, and denied requests (no permission) are logged too.
 
-Agents log every action they run with the master's IP, and every request with a missing or wrong token:
+Agents log every action they run with the master's IP, every request with a missing or wrong token, and every other request they refuse, with the reason (unknown or unlabeled container, a value not in the `dcc.edit` label, a malformed request):
 ```
 192.168.2.3 requested restart on beszel-agent
 beszel-agent restart succeeded
 Rejected unauthorized GET /containers from 192.168.2.94
+Rejected POST /containers/hawser/settings from 192.168.2.3: HTTP 400 {"error": "'trace' is not an allowed value for LOG_LEVEL"}
 ```
 
 If the bot can't start (for example DISCORD_GUILD_ID isn't a number, or the config folder isn't writable), it exits with an error in the logs instead of running without commands.

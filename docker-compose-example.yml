@@ -20,7 +20,9 @@ services:
   #   environment:
   #     AGENT_TOKEN: ${AGENT_TOKEN}
   #     TZ: ${TZ}
+  #     # AGENT_ENABLE_EDIT: "true"   # only for settings editing, with the /config mount below
   #   volumes:
   #     - /var/run/docker.sock:/var/run/docker.sock
+  #     # - ./config:/config          # only for settings editing; owned by uid 1000
   #   ports:
   #     - "<private ip>:8080:8080"
