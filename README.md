@@ -173,7 +173,7 @@ environment:
 
 Host names must be unique, can't contain `/`, and can't be the same as `LocalName`. A host entry that breaks these rules, is missing `url`/`token_env`, or whose `token_env` variable isn't set, is skipped and an error is logged; the other hosts keep working. Upgrading from v1.0.7: `"Hosts": {"server2": {...}}` is now a list called `SecondaryHosts`, so `"SecondaryHosts": [{"name": "server2", ...}]`. The bot logs a warning at startup while settings.json still has `"Hosts"`.
 
-When upgrading, update the bot before (or together with) its agents. A newer bot works with older agents, but a bot older than v1.0.9 can't read v1.0.9+ agents and skips them as unavailable.
+When upgrading, update the bot before (or together with) its agents. A newer bot works with older agents (for v1.0.7 agents, set `name` in `SecondaryHosts`: they can't report their host name), but a bot older than v1.0.9 can't read v1.0.9+ agents and skips them as unavailable.
 
 The agent can only list, start, stop and restart containers on its host, and it never lists or controls itself. Everyone with the token has that power, and the token is sent in plain HTTP. **Only expose the agent on a private network (Tailscale, WireGuard, LAN) or behind a TLS reverse proxy (then use an `https://` url) - never directly on the internet.**
 
@@ -209,7 +209,8 @@ Then `docker compose up -d` it once. Until a value is picked in Discord, the con
 Notes:
 - The image needs `/bin/sh` (nearly all do; minimal "distroless" images don't, and can't use this). The app must read the variables at startup, which is what environment variables are for.
 - Up to 4 variables per container, up to 25 values each, each value at most 100 characters and without `,` or `;`. One value (`VAR=value`) means that's the only choice.
-- Applying restarts the container, so anyone connected to it is disconnected. Every change is logged with the Discord user, like other actions.
+- Applying restarts the container, so anyone connected to it is disconnected. Every change is logged with the Discord user, like other actions. If the restart fails, the picked values stay saved and apply at the container's next start.
+- Removing a value or variable from `dcc.edit` doesn't reset a container that already uses it: `dcc-env.sh` keeps exporting the saved value. Pick a new value in Discord, or delete `container-settings/<container name>/settings.env` and restart the container to go back to the compose values.
 - If the folder from step 3 was created by Docker first (e.g. you did step 4 before starting the bot), it belongs to root and the bot can't write to it. The bot logs the fix: `sudo chown -R 1000 <folder>`.
 - Containers on a [remote host](#remote-hosts): set `AGENT_ENABLE_EDIT=true` on that agent and give it a config folder (`-v ./config:/config`, owned by uid 1000); the folder in step 4 is then in the agent's config folder. Without `AGENT_ENABLE_EDIT`, the agent refuses edits and its containers show no Settings.
 

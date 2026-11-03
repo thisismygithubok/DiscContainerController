@@ -6,7 +6,6 @@ from discord.ext import commands
 from scripts.settings import load_settings, allowed_sections, remote_hosts, local_name
 from scripts.containers import apply_settings, container_host, control, get_settings, list_all, permitted, resolve_hosts
 from scripts import container_settings
-from scripts.container_settings import parse_edit
 
 logger = logging.getLogger(__name__)
 
@@ -177,7 +176,7 @@ class selectContainerName(discord.ui.Select):
 def may_edit(user, container):
     """Whether to offer Settings: editing is on, the container has a dcc.edit label, and EditRoles covers the user."""
     settings = load_settings() or {}
-    if settings.get('EnableSettingsEditing') is not True or not parse_edit(container[4]):
+    if settings.get('EnableSettingsEditing') is not True or not container_settings.parse_edit(container[4]):
         return False
     try:
         return bool(permitted([container], allowed_sections(settings, user, 'EditRoles'), local_name(settings)))
@@ -203,7 +202,7 @@ async def edit_context(interaction: discord.Interaction, name: str):
         logger.warning(f'{interaction.user} ({interaction.user.id}) denied settings on {name}: no permission')
         await interaction.followup.send(f'You do not have permission to change the settings of {name}', ephemeral=True)
         return None
-    return parse_edit(container[4]), hosts
+    return container_settings.parse_edit(container[4]), hosts
 
 async def open_settings(interaction: discord.Interaction, name: str):
     context = await edit_context(interaction, name)
@@ -261,7 +260,9 @@ async def run_apply(interaction: discord.Interaction, name: str, values: dict):
     changes = ', '.join(f'{k}={v}' for k, v in values.items())
     if code != 0:
         logger.error(f'{name} failed to apply settings {values}: {err}')
-        await interaction.followup.send(f'{interaction.user.mention} failed to apply settings to {name} - see service logs.')
+        # A failed restart still leaves the values saved: they apply at the container's next start
+        result = 'saved the settings, but could not restart' if 'saved, but restart failed' in err else 'failed to apply settings to'
+        await interaction.followup.send(f'{interaction.user.mention} {result} {name} - see service logs.')
         return
     logger.info(f'{name} restarted with settings {values}')
     await interaction.followup.send(f'{interaction.user.mention} {name} has been restarted with {changes}')

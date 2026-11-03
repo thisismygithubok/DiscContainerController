@@ -105,9 +105,13 @@ async def post_settings(request):
         return web.json_response({'error': 'expected {"values": {"VAR": "value"}}'}, status=400)
     logger.info(f'{request.remote} requested settings {values} on {name}')
     # Checked against this host's own label: the master's request is never trusted for what is editable
+    error = container_settings.invalid(values, spec)
+    if error:
+        return web.json_response({'error': error}, status=400)  # logged by the auth middleware
     code, err = await container_settings.apply(name, values, spec)
     if code != 0:
-        return web.json_response({'error': err}, status=400)  # logged by the auth middleware
+        logger.error(f'{name} settings failed: {err}')
+        return web.json_response({'error': err}, status=500)
     logger.info(f'{name} restarted with new settings')
     return web.json_response({'ok': True})
 
