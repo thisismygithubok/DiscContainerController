@@ -105,7 +105,8 @@ async def apply(container, values, spec):
     except (OSError, RuntimeError, ValueError) as e:
         return 1, str(e)
     code, _, err = await docker('restart', container)
-    return code, err.strip()
+    # The file is already written, so the container gets the new values at its next start anyway
+    return code, f'saved, but restart failed: {err.strip()}' if code else ''
 
 if __name__ == "__main__":
     import asyncio, subprocess, tempfile
@@ -120,10 +121,10 @@ if __name__ == "__main__":
 
     with tempfile.TemporaryDirectory() as tmp:
         SETTINGS_DIR = Path(tmp)
-        restarted = []
+        restarted, fail = [], []
         async def fake_docker(*args):
             restarted.append(args)
-            return 0, '', ''
+            return (1, '', 'boom') if fail else (0, '', '')
         docker = fake_docker
         assert asyncio.run(apply('bo3', {'MAPS': 'zm_zod'}, spec)) == (0, '') and restarted == [('restart', 'bo3')]
         assert asyncio.run(apply('bo3', {'MODE': 'a'}, spec)) == (0, '')
@@ -131,6 +132,10 @@ if __name__ == "__main__":
         assert asyncio.run(apply('bo3', {'MAPS': 'nope'}, spec))[0] == 1 and len(restarted) == 2, 'invalid value: no restart'
         assert asyncio.run(apply('bo3', {'MAPS': 'zm_genesis'}, {'MAPS': spec['MAPS']})) == (0, '')
         assert read_values('bo3') == {'MAPS': 'zm_genesis'}, 'variables dropped from the label are removed'
+        fail.append(True)
+        assert asyncio.run(apply('bo3', {'MAPS': 'zm_zod'}, spec)) == (1, 'saved, but restart failed: boom')
+        assert read_values('bo3')['MAPS'] == 'zm_zod', 'a failed restart still leaves the value saved'
+        fail.clear()
         (Path(tmp) / 'link').symlink_to('/etc')  # a symlinked folder must not lead outside either
         for bad in ('../x', '', '-rf', '..', 'a/b', 'link'):
             try:
